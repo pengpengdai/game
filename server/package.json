@@ -1,0 +1,15 @@
+{
+  "name": "typing-race-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "打字比赛小游戏服务端：登录/记录/排行榜/复活限次 + WebSocket 房间对战（零外部依赖，可独立运行）",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node test/e2e.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {}
+}
