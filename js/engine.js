@@ -101,14 +101,16 @@ function buildHomeButtons() {
 
 function buildLobbyButtons() {
   const L = LAYOUT.lobby;
-  const list = [];
-  if (G.gameMode === 'pvp' && G.pvp.roomId) {
-    list.push({ x: W / 2 - L.btnW - 20, y: L.btnY, w: L.btnW, h: L.btnH, label: '邀请好友', action: 'invite', primary: true });
-  }
-  if (!G.pvp.ready) {
-    list.push({ x: W / 2 - L.btnW / 2, y: L.btnY, w: L.btnW, h: L.btnH, label: '就绪', action: 'ready', primary: true });
-  }
-  list.push({ x: W / 2 + L.btnW / 2 + 20 - L.btnW, y: L.btnY, w: L.btnW, h: L.btnH, label: '离开', action: 'leave' });
+  const btns = [];
+  if (G.gameMode === 'pvp' && G.pvp.roomId) btns.push({ label: '邀请好友', action: 'invite', primary: true });
+  if (!G.pvp.ready) btns.push({ label: '就绪', action: 'ready', primary: true });
+  btns.push({ label: '离开', action: 'leave' });
+  const totalW = btns.length * L.btnW + Math.max(0, btns.length - 1) * 12;
+  const x0 = (W - totalW) / 2;
+  const list = btns.map((b, i) => ({
+    x: x0 + i * (L.btnW + 12), y: L.btnY, w: L.btnW, h: L.btnH,
+    label: b.label, action: b.action, primary: !!b.primary,
+  }));
   setButtons(list);
 }
 
@@ -461,7 +463,7 @@ function update(dt) {
     G.elapsed = (Date.now() - G.startedAt) / 1000;
 
     if (G.gameMode === 'ai') {
-      if (!G.gameOver) {
+      if (!G.gameOver && !G.playerFinished) {
         const paused = G.slowUsed && Date.now() < G.aiPauseUntil;
         if (!paused) {
           G.aiProgress = Math.min(1, G.aiProgress + G.aiSpeed * dt);
@@ -474,7 +476,7 @@ function update(dt) {
           }
         }
         // 对手接近终点 → 出现减速广告按钮
-        if (!G.slowUsed && G.aiProgress >= 0.8 && !G.slowBtn && !G.gameOver) {
+        if (!G.slowUsed && G.aiProgress >= 0.8 && !G.slowBtn && !G.gameOver && !G.playerFinished) {
           G.slowBtn = { x: W / 2 - 110, y: LAYOUT.play.trackY + LAYOUT.play.laneH * 2 + LAYOUT.play.laneGap + 10, w: 220, h: 34, label: '看广告让对手暂停 5 秒' };
         }
       }

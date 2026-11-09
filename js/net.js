@@ -25,20 +25,16 @@ function getToken() { return token; }
 
 /** HTTP 请求（自动带 token） */
 function http(path, data, method) {
-  return new Promise((resolve, reject) => {
-    Platform.request({
-      url: Config.SERVER_BASE + path,
-      method: method || 'POST',
-      data: data || {},
-      header: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      success: (r) => {
-        let body = r.data;
-        if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) {} }
-        if (r.statusCode >= 200 && r.statusCode < 300) resolve(body);
-        else reject(body || { code: 'HTTP_' + r.statusCode });
-      },
-      fail: reject,
-    });
+  return Platform.request({
+    url: Config.SERVER_BASE + path,
+    method: method || 'POST',
+    data: data || {},
+    header: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+  }).then((r) => {
+    let body = r.data;
+    if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) {} }
+    if (r.statusCode >= 200 && r.statusCode < 300) return body;
+    throw (body || { code: 'HTTP_' + r.statusCode });
   });
 }
 
