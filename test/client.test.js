@@ -98,7 +98,7 @@ async function main() {
   // 2. 选 26 键 → 开始 → 倒计时 → 键盘出现
   gaming: {
     startRace('q26');
-    assert(G.state === 'COUNTDOWN' && G.countdown > 2.9, '点开始进入 3 秒倒计时');
+    assert(G.state === 'COUNTDOWN' && G.countdown === 2, '点开始 → 简单难度倒计时 2 秒（按配置）');
     advance(3.2);
     assert(G.state === 'PLAY', '倒计时结束进入 PLAY');
     assert(G.kb.visible === true, '开始后键盘出现');

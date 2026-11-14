@@ -207,7 +207,8 @@ function startAiGame(mode, level) {
   G.mode = mode; G.level = level;
   resetRound();
   G.passage = Words.pick(mode, level);
-  G.aiSpeed = G.passage.length / AI_TIME[level];
+  // 进度比例/秒：整篇文章在 AI_TIME[level] 秒内走完（1 = 终点）
+  G.aiSpeed = 1 / AI_TIME[level];
   G.countdown = 0;
   G.state = 'READY';
   G.slowBtn = null;
