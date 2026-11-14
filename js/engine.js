@@ -14,6 +14,12 @@ const sys = Platform.getSystemInfoSync();
 const W = sys.windowWidth || 375;
 const H = sys.windowHeight || 667;
 
+// 安全区：顶部状态栏/刘海、底部 Home 指示条
+const SAFE = sys.safeArea || {};
+const TOP_INSET = Math.max(0, SAFE.top !== undefined ? SAFE.top : (sys.statusBarHeight || 0));
+const BOTTOM_INSET = SAFE.bottom ? Math.max(0, H - SAFE.bottom) : 0;
+const USABLE_H = H - TOP_INSET - BOTTOM_INSET;
+
 const AI_TIME = { easy: 25, normal: 32, hard: 42 };
 const BEST_KEY = 'tp_best';
 const REVIVE_DAY_LIMIT = 5;
@@ -23,8 +29,8 @@ const RANK_EN = [[300, 'S'], [225, 'A'], [150, 'B'], [100, 'C'], [0, 'D']];
 const RANK_CN = [[120, 'S'], [90, 'A'], [60, 'B'], [36, 'C'], [0, 'D']];
 
 const KB_KEY = 'tp_kb_layout';                  // 记住用户上次选的键盘
-const KB_H = Math.round(Math.min(246, H * 0.37));
-const KB_TOP = H - KB_H;
+const KB_H = Math.round(Math.min(246, USABLE_H * 0.38));
+const KB_TOP = H - BOTTOM_INSET - KB_H;
 
 /** 开局倒计时秒数（来自 Config.COUNTDOWN_SEC：可统一、可按难度、可设 0 跳过） */
 function countdownFor(level) {
@@ -38,38 +44,43 @@ function countdownFor(level) {
 }
 
 const LAYOUT = {
-  W: W, H: H,
+  W: W, H: H, top: TOP_INSET, bottom: BOTTOM_INSET, usableH: USABLE_H,
+  kbTop: KB_TOP, kbH: KB_H,
   home: {
-    titleY: 66, subY: 96,
-    bestY: 124, bestH: 92,
-    modeLabelY: 236, modeBtnY: 252, modeBtnW: 148, modeBtnH: 44, modeGap: 12,
-    levelLabelY: 306, levelBtnY: 322, levelBtnW: 104, levelBtnH: 42, levelGap: 10,
-    startY: 378, startW: 260, startH: 56,
-    pvpY: 448, pvpW: 260, pvpH: 48,
-    lbBtnY: 508, lbBtnW: 128, lbBtnH: 44,
-    soundX: W - 66, soundY: 16, soundW: 54, soundH: 32,
-    lbModal: { x: 24, y: 120, w: W - 48, h: 386, closeY: 448 },
+    titleY: TOP_INSET + 66, subY: TOP_INSET + 96,
+    bestY: TOP_INSET + 124, bestH: 92,
+    modeLabelY: TOP_INSET + 236, modeBtnY: TOP_INSET + 252, modeBtnW: 148, modeBtnH: 44, modeGap: 12,
+    levelLabelY: TOP_INSET + 306, levelBtnY: TOP_INSET + 322, levelBtnW: 104, levelBtnH: 42, levelGap: 10,
+    startY: TOP_INSET + 378, startW: 260, startH: 56,
+    pvpY: TOP_INSET + 448, pvpW: 260, pvpH: 48,
+    lbBtnY: TOP_INSET + 508, lbBtnW: 128, lbBtnH: 44,
+    soundX: W - 66, soundY: TOP_INSET + 16, soundW: 54, soundH: 32,
+    lbModal: { x: 24, y: TOP_INSET + 120, w: W - 48, h: 386, closeY: TOP_INSET + 448 },
   },
   lobby: {
-    titleY: 110, roomY: 160, statusY: 205,
-    btnY: 300, btnW: 130, btnH: 50,
+    titleY: TOP_INSET + 84, subY: TOP_INSET + 110,
+    cardY: TOP_INSET + 132, cardH: 116,
+    vsY: TOP_INSET + 288, statusY: TOP_INSET + 428,
+    btnY: TOP_INSET + 364, btnW: 104, btnH: 50,
   },
   play: {
-    headX: 14, headY: 12, headW: W - 28, headH: 94,
-    statY: 114, statH: 36, statGap: 8,
-    panelX: 14, panelY: 158, panelW: W - 28, panelH: KB_TOP - 158 - 8,
+    headX: 14, headY: TOP_INSET + 12, headW: W - 28, headH: 94,
+    statY: TOP_INSET + 114, statH: 36, statGap: 8,
+    panelX: 14, panelY: TOP_INSET + 158, panelW: W - 28,
+    panelH: KB_TOP - (TOP_INSET + 158) - 8,
     kbTop: KB_TOP, kbH: KB_H,
+    pauseBtn: { x: W - 48, y: TOP_INSET + 14, w: 34, h: 34 },
   },
   ready: {
-    cardX: 22, cardY: 92, cardW: W - 44, cardH: 340,
-    titleY: 134, subY: 162,
-    optY: 196, optH: 88, optPad: 18, optGap: 12,
-    startY: 312, startH: 52,
-    hintY: 388,
+    cardX: 22, cardY: TOP_INSET + 92, cardW: W - 44, cardH: 340,
+    titleY: TOP_INSET + 134, subY: TOP_INSET + 162,
+    optY: TOP_INSET + 196, optH: 88, optPad: 18, optGap: 12,
+    startY: TOP_INSET + 312, startH: 52,
+    hintY: TOP_INSET + 388,
   },
   result: {
-    bannerY: 110, rankY: 224, rankR: 44,
-    statY: 300, scoreY: 434, btnY: 470, btnW: 96, btnH: 48,
+    bannerY: TOP_INSET + 110, rankY: TOP_INSET + 224, rankR: 44,
+    statY: TOP_INSET + 300, scoreY: TOP_INSET + 434, btnY: TOP_INSET + 470, btnW: 96, btnH: 48,
   },
 };
 
@@ -88,6 +99,8 @@ const G = {
   reviveUsed: false, slowUsed: false, aiPauseUntil: 0,
   slowBtn: null,
   countdown: 0,
+  lastInput: '',                       // 系统输入法上次的整段文本（中文增量用）
+  pause: { total: 0, startedAt: 0 },   // 暂停累计时长 / 本次暂停起点
   fx: {
     lastCharAt: 0, comboAt: 0, comboValue: 0, resultAt: 0, startAt: 0,
     errAt: 0, ripple: null,
@@ -196,6 +209,9 @@ function gotoHome() {
   G.pvp.waitingRematch = false;
   G.kb.visible = false;
   G.countdown = 0;
+  G.pause.total = 0;
+  G.pause.startedAt = 0;
+  G.lastInput = '';
   buildHomeButtons();
   Platform.hideKeyboard();
   Audio.play('click');
@@ -302,13 +318,16 @@ function kbPress(k) {
 function startPlay() {
   G.state = 'PLAY';
   G.countdown = 0;
-  G.buttons = [];
   G.startedAt = Date.now();
   G.fx.startAt = Date.now();
+  G.pause.total = 0;
+  G.pause.startedAt = 0;
+  G.lastInput = '';
   G.kb.visible = G.mode === 'en';
   G.kb.tip = '';
   G.kb.t9 = {};
   G.kb.lastSlot = -1;
+  G.buttons = buildPlayButtons();
   if (G.mode === 'cn') openKeyboard();
   Audio.play('click');
 }
@@ -328,6 +347,48 @@ function buildReadyButtons() {
     label: G.mode === 'en' ? '开始打字' : '开始打字（系统输入法）', action: 'start_race', primary: true, small: G.mode !== 'en',
   });
   setButtons(list);
+}
+
+/** 对局中的悬浮按钮：暂停；中文模式额外提供「唤起键盘」 */
+function buildPlayButtons() {
+  const list = [];
+  if (G.gameMode === 'ai') {
+    const p = LAYOUT.play.pauseBtn;
+    list.push({ x: p.x, y: p.y, w: p.w, h: p.h, label: 'Ⅱ', action: 'pause', small: true, circle: true });
+  }
+  if (G.mode === 'cn') {
+    list.push({
+      x: 20, y: KB_TOP + Math.round((KB_H - 48) / 2) - 20, w: W - 40, h: 48,
+      label: '点此唤起键盘', action: 'kb_show', secondary: true,
+    });
+  }
+  return list;
+}
+
+function pauseGame() {
+  if (G.state !== 'PLAY') return;
+  G.state = 'PAUSED';
+  G.pause.startedAt = Date.now();
+  G.kb.visible = false;
+  Platform.hideKeyboard();
+  const cy = (TOP_INSET + H - BOTTOM_INSET) / 2;
+  const bw = (W - 80 - 48 - 12) / 2;
+  setButtons([
+    { x: 40 + 24, y: cy + 78, w: bw, h: 46, label: '继续', action: 'resume', primary: true },
+    { x: 40 + 24 + bw + 12, y: cy + 78, w: bw, h: 46, label: '退出', action: 'pause_home' },
+  ]);
+  Audio.play('click');
+}
+
+function resumeGame() {
+  if (G.state !== 'PAUSED') return;
+  G.pause.total += Date.now() - G.pause.startedAt;
+  G.pause.startedAt = 0;
+  G.state = 'PLAY';
+  G.kb.visible = G.mode === 'en';
+  if (G.mode === 'cn') openKeyboard();
+  G.buttons = buildPlayButtons();
+  Audio.play('click');
 }
 
 // ---- PVP ----
@@ -466,18 +527,30 @@ function input(value) {
   if (G.state !== 'PLAY') return;
   if (G.gameMode === 'ai' && G.gameOver) return;
   if (G.gameMode === 'pvp' && G.playerFinished) return;
-  if (!value) return;
-  G.lastValue = value;
+  if (typeof value !== 'string' || !value) return;
 
-  if (G.mode === 'cn' && /^[a-zA-Z]+$/.test(value)) return;
+  // 中文：系统输入法返回的是【整段文本】，只处理新增部分；删除操作忽略
+  let delta = value;
+  if (G.mode === 'cn') {
+    const prev = G.lastInput || '';
+    if (value.length < prev.length) { G.lastInput = ''; return; }
+    if (value === prev) return;
+    delta = value.indexOf(prev) === 0 ? value.slice(prev.length) : value;
+  }
+  G.lastValue = value;
+  if (G.mode === 'cn') G.lastInput = value;
+
+  // 拼音输入阶段（纯字母）不参与比对
+  if (G.mode === 'cn' && /^[a-zA-Z]+$/.test(delta)) return;
+  if (!delta) return;
 
   const pass = G.passage;
   let adv = 0, extra = 0;
-  for (let i = 0; i < value.length; i++) {
+  for (let i = 0; i < delta.length; i++) {
     const idx = G.typedLen + i;
     if (idx < pass.length) {
-      if (value[i] === pass[idx]) adv++;
-      else { extra = value.length - i; break; }
+      if (delta[i] === pass[idx]) adv++;
+      else { extra = delta.length - i; break; }
     } else extra++;
   }
 
@@ -488,6 +561,8 @@ function input(value) {
     G.fx.errAt = Date.now();
     Platform.vibrateShort();
     Audio.play('error');
+    // 判错后清空输入框，避免错误文本反复堆积
+    G.lastInput = '';
     Platform.setKeyboardValue('');
     return;
   }
@@ -506,6 +581,7 @@ function input(value) {
       G.fx.comboValue = G.combo;
     }
     if (G.mode === 'en') Platform.setKeyboardValue('');
+    if (G.mode === 'cn' && !G.kb.visible) G.buttons = buildPlayButtons();
 
     if (G.gameMode === 'pvp') reportProgress();
 
@@ -554,7 +630,10 @@ function doRevive() {
   G.aiProgress = 0.6;   // AI 回退到 60%
   G.overDelay = 0;
   G.reviveUsed = true;
-  G.buttons = [];
+  G.buttons = buildPlayButtons();
+  G.lastInput = '';
+  // 把结算页停留的时间计入暂停，避免复活后计时跳增
+  if (G.fx.resultAt) G.pause.total += Date.now() - G.fx.resultAt;
   G.kb.visible = G.mode === 'en';
   G.kb.tip = '';
   G.kb.t9 = {};
@@ -610,6 +689,8 @@ function rematchPvp() {
 function update(dt) {
   if (G.flash > 0) G.flash -= dt;
 
+  if (G.state === 'PAUSED') return;   // 暂停：冻结计时与 AI
+
   if (G.state === 'COUNTDOWN') {
     G.countdown -= dt;
     if (G.countdown <= 0) { G.countdown = 0; startPlay(); }
@@ -617,7 +698,7 @@ function update(dt) {
   }
 
   if (G.state === 'PLAY') {
-    G.elapsed = (Date.now() - G.startedAt) / 1000;
+    G.elapsed = (Date.now() - G.startedAt - (G.pause.total || 0)) / 1000;
 
     if (G.gameMode === 'ai') {
       if (!G.gameOver && !G.playerFinished) {
@@ -684,6 +765,7 @@ function finishRound(myStats, peerStats) {
 
   buildResultButtons();
   G.fx.resultAt = Date.now();
+  G.lastInput = '';
   G.kb.visible = false;
   Platform.hideKeyboard();
   Audio.play('click');
@@ -761,10 +843,17 @@ function tap(x, y) {
       if (sec <= 0) startPlay();          // 配置为 0 → 跳过倒计时直接开打
       else { G.state = 'COUNTDOWN'; G.countdown = sec; }
     }
+    else if (a === 'pause') pauseGame();
+    else if (a === 'resume') resumeGame();
+    else if (a === 'pause_home') gotoHome();
+    else if (a === 'kb_show') openKeyboard();
     else if (a.indexOf('mode:') === 0) { G.mode = a.slice(5); buildHomeButtons(); }
     else if (a.indexOf('level:') === 0) { G.level = a.slice(6); buildHomeButtons(); }
     return;
   }
+
+  // 没点到按钮：中文模式下点任意空白处重新唤起系统键盘
+  if (G.state === 'PLAY' && G.mode === 'cn') openKeyboard();
 }
 
 function toggleSound() {
@@ -796,4 +885,5 @@ function firstTouch() {
 module.exports = {
   G, bootstrap, gotoHome, startAiGame, startPvpLobby, pvpJoin, pvpReady, pvpLeave,
   update, tap, input, confirmClear, onNet, firstTouch, handleLaunchOptions, startPlay, buildKeyboard,
+  buildLobbyButtons, pauseGame, resumeGame,
 };

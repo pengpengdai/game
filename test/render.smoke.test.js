@@ -22,7 +22,7 @@ function makeCtx() {
 
 global.tt = {
   createCanvas: () => ({ width: 0, height: 0, getContext: () => makeCtx() }),
-  getSystemInfoSync: () => ({ windowWidth: 375, windowHeight: 667, pixelRatio: 2 }),
+  getSystemInfoSync: () => ({ windowWidth: 375, windowHeight: 667, pixelRatio: 2, statusBarHeight: 20, safeArea: { top: 20, bottom: 647 } }),
   onTouchStart: () => {}, onTouchEnd: () => {}, onTouchMove: () => {},
   showKeyboard: () => {}, hideKeyboard: () => {}, setKeyboardValue: () => {},
   onKeyboardInput: () => {}, onKeyboardConfirm: () => {}, onKeyboardComplete: () => {},
@@ -122,6 +122,14 @@ G.buttons = [{ x: 20, y: 300, w: 100, h: 46, label: '就绪', action: 'ready', p
 calls.fillText = 0;
 Render.render();
 assert(calls.fillText > 4, 'LOBBY 大厅渲染正常');
+
+// PAUSED
+Game.startAiGame('en', 'easy');
+Game.startPlay();
+Game.pauseGame();
+calls = { fillText: 0, fillRect: 0, arc: 0, arcTo: 0 };
+Render.render();
+assert(G.state === 'PAUSED' && calls.fillText > 5, 'PAUSED 暂停页渲染正常');
 
 console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');
 process.exit(fail > 0 ? 1 : 0);

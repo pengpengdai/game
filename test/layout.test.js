@@ -2,7 +2,7 @@
 const storage = {};
 global.tt = {
   createCanvas: () => null,
-  getSystemInfoSync: () => ({ windowWidth: 375, windowHeight: 667, pixelRatio: 2 }),
+  getSystemInfoSync: () => ({ windowWidth: 375, windowHeight: 667, pixelRatio: 2, statusBarHeight: 20, safeArea: { top: 20, bottom: 647 } }),
   onTouchStart: () => {}, onTouchEnd: () => {}, onTouchMove: () => {},
   showKeyboard: () => {}, hideKeyboard: () => {}, setKeyboardValue: () => {},
   onKeyboardInput: () => {}, onKeyboardConfirm: () => {}, onKeyboardComplete: () => {},
@@ -41,7 +41,7 @@ Game.bootstrap();
   const lh = L.home;
       // 各区间不重叠
   const rects = {
-    brand: R(22, 40, W - 44, 44),
+    brand: R(22, (L.top || 0) + 40, W - 44, 44),
     bestCard: R(22, lh.bestY, W - 44, lh.bestH),
     modeBtns: R((W - (lh.modeBtnW * 2 + lh.modeGap)) / 2, lh.modeBtnY, lh.modeBtnW * 2 + lh.modeGap, lh.modeBtnH),
     levelBtns: R((W - (lh.levelBtnW * 3 + lh.levelGap * 2)) / 2, lh.levelBtnY, lh.levelBtnW * 3 + lh.levelGap * 2, lh.levelBtnH),
@@ -144,16 +144,40 @@ Game.bootstrap();
   Game.gotoHome();
   G.state = 'LOBBY'; G.gameMode = 'pvp'; G.pvp.roomId = 'R1X43Q8';
   G.pvp.peer = { nickname: '小明', avatar: '' };
-  Game.pvpReady();
   const ll = L.lobby;
-  const roomCard = R(22, ll.roomY - 34, W - 44, 86);
+  const roomCard = R(22, ll.cardY, W - 44, ll.cardH);
   assert(inside(roomCard), '房间卡在屏幕内');
-  assert(G.buttons.every((b) => inside(R(b.x, b.y, b.w, b.h))), '大厅按钮在屏幕内');
-  const btns = G.buttons.map((b) => R(b.x, b.y, b.w, b.h));
+  // 未就绪：邀请/就绪/离开 3 个按钮
+  Game.buildLobbyButtons();
+  let btns = G.buttons.map((b) => R(b.x, b.y, b.w, b.h));
+  assert(btns.length === 3, '未就绪时 3 个按钮（邀请/就绪/离开）');
+  assert(btns.every(inside), '大厅按钮在屏幕内');
   let ov = 0;
   for (let i = 0; i < btns.length; i++) for (let j = i + 1; j < btns.length; j++) if (overlap(btns[i], btns[j])) ov++;
   assert(ov === 0, '大厅按钮互不重叠（重叠数 ' + ov + '）');
   pair(roomCard, btns[0], '房间卡 vs 按钮');
+  // VS 行（头像圆 + 名字 + 就绪文字）不与按钮重叠
+  const vsRow = R(48, ll.vsY - 30, W - 96, 100);
+  pair(vsRow, btns[0], 'VS 行 vs 按钮');
+  // 就绪后：邀请/离开 2 个按钮
+  Game.pvpReady();
+  btns = G.buttons.map((b) => R(b.x, b.y, b.w, b.h));
+  assert(btns.length === 2, '就绪后 2 个按钮');
+  assert(btns.every(inside), '就绪后按钮在屏幕内');
+}
+
+// ---- 暂停页 ----
+{
+  Game.startAiGame('en', 'easy');
+  Game.startPlay();
+  Game.pauseGame();
+  assert(G.state === 'PAUSED', '可进入暂停');
+  const pbtns = G.buttons.map((b) => R(b.x, b.y, b.w, b.h));
+  assert(pbtns.every(inside), '暂停按钮在屏幕内');
+  const cy = (L.top + H - L.bottom) / 2;
+  const pcard = R(40, cy - 150, W - 80, 300);
+  assert(inside(pcard), '暂停卡片在屏幕内');
+  assert(pbtns.every((b) => b.y >= pcard.y && b.y + b.h <= pcard.y + pcard.h), '暂停按钮在卡片内');
 }
 
 console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');

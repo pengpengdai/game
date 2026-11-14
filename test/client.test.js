@@ -20,7 +20,7 @@ function adComplete() { if (adCloseCb) adCloseCb({ isEnded: true }); }
 
 global.tt = {
   createCanvas: () => null,
-  getSystemInfoSync: () => ({ windowWidth: 375, windowHeight: 667, pixelRatio: 2 }),
+  getSystemInfoSync: () => ({ windowWidth: 375, windowHeight: 667, pixelRatio: 2, statusBarHeight: 20, safeArea: { top: 20, bottom: 647 } }),
   onTouchStart: () => {}, onTouchEnd: () => {}, onTouchMove: () => {},
   showKeyboard: () => {}, hideKeyboard: () => {}, setKeyboardValue: () => {},
   onKeyboardInput: () => {}, onKeyboardConfirm: () => {}, onKeyboardComplete: () => {},
@@ -220,6 +220,43 @@ async function main() {
   startRace('q26');
   assert(G.state === 'PLAY' && G.kb.visible === true, '配置为 0 → 跳过倒计时，键区直接可用');
   Config.COUNTDOWN_SEC = 3;
+
+  // 10. 暂停：冻结 AI 与计时；恢复后计时不含暂停时长；暂停中可退出
+  {
+    Game.startAiGame('en', 'easy');
+    startRace('q26');
+    advance(3.2);
+    assert(G.state === 'PLAY' && G.buttons.some((b) => b.action === 'pause'), 'AI 对局中有暂停按钮');
+    G.aiSpeed = 0.04;
+    advance(1);
+    const aiBefore = G.aiProgress;
+    const elBefore = G.elapsed;
+    const pauseBtn = G.buttons.find((b) => b.action === 'pause');
+    Game.tap(pauseBtn.x + 5, pauseBtn.y + 5);
+    assert(G.state === 'PAUSED' && G.kb.visible === false, '点暂停 → PAUSED 且键盘隐藏');
+    advance(3);
+    assert(Math.abs(G.aiProgress - aiBefore) < 1e-9, '暂停期间 AI 冻结');
+    assert(Math.abs(G.elapsed - elBefore) < 1e-9, '暂停期间计时冻结');
+    const t0 = G.pause.total;
+    await tick(150);
+    const resumeBtn = G.buttons.find((b) => b.action === 'resume');
+    Game.tap(resumeBtn.x + 5, resumeBtn.y + 5);
+    assert(G.state === 'PLAY' && G.kb.visible === true, '点继续 → PLAY 且键盘恢复');
+    assert(G.pause.total - t0 >= 100, '暂停时长被累计（' + Math.round(G.pause.total - t0) + 'ms）');
+    advance(0.1);
+    assert(G.elapsed < 0.1, '恢复后计时不含暂停时长: ' + G.elapsed.toFixed(2) + 's');
+    Game.tap(G.buttons.find((b) => b.action === 'pause').x + 5, G.buttons.find((b) => b.action === 'pause').y + 5);
+    Game.tap(G.buttons.find((b) => b.action === 'pause_home').x + 5, G.buttons.find((b) => b.action === 'pause_home').y + 5);
+    assert(G.state === 'HOME', '暂停中退出 → 回首页');
+  }
+
+  // 11. 中文模式 PLAY 提供「唤起键盘」按钮
+  {
+    Game.startAiGame('cn', 'easy');
+    startRace();
+    advance(3.2);   // 全局配置 3 秒倒计时 + 余量
+    assert(G.state === 'PLAY' && G.buttons.some((b) => b.action === 'kb_show'), '中文模式对局中有「唤起键盘」按钮（state=' + G.state + ', btns=' + JSON.stringify(G.buttons.map((b) => b.action)) + '）');
+  }
 
   console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');
   process.exit(fail > 0 ? 1 : 0);

@@ -176,13 +176,14 @@ const MILESTONES = [500, 1000, 2000, 3000, 5000, 8000];
 
 function drawHome() {
   const lh = L.home;
+  const T = L.top || 0;
   bg();
 
-  // 品牌区
-  fillRR(22, 40, 44, 44, 12, C.orange);
-  iconBolt(22 + 12, 40 + 8, 22, '#FFFFFF');
-  txt('打字比赛', 78, 52, 24, C.ink, 'left', 800);
-  txt('速度竞技 · AI 对决 / 好友对战', 78, 74, 11, C.muted, 'left', 400);
+  // 品牌区（预留状态栏高度）
+  fillRR(22, T + 40, 44, 44, 12, C.orange);
+  iconBolt(22 + 12, T + 48, 22, '#FFFFFF');
+  txt('打字比赛', 78, T + 52, 24, C.ink, 'left', 800);
+  txt('速度竞技 · AI 对决 / 好友对战', 78, T + 74, 11, C.muted, 'left', 400);
 
   // 音效
   drawButton(G.buttons.find((b) => b.action === 'sound'));
@@ -241,6 +242,16 @@ function drawPills() {
 
 function drawButton(b) {
   if (!b) return;
+  if (b.action === 'pause') {
+    ctx.beginPath();
+    ctx.arc(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(31,42,68,0.10)';
+    ctx.fill();
+    ctx.fillStyle = C.navy;
+    ctx.fillRect(b.x + b.w / 2 - 5, b.y + 11, 3, 12);
+    ctx.fillRect(b.x + b.w / 2 + 2, b.y + 11, 3, 12);
+    return;
+  }
   if (b.action === 'sound') {
     fillRR(b.x, b.y, b.w, b.h, b.h / 2, 'rgba(255,255,255,0.85)');
     iconSpeaker(b.x + b.w / 2, b.y + b.h / 2, G.soundOn);
@@ -340,17 +351,16 @@ function levelName(lv) { return { easy: '简单', normal: '普通', hard: '困�
 function drawLobby() {
   const ll = L.lobby;
   bg();
-  txt('好友对战', W / 2, 84, 26, C.ink, 'center', 800);
-  txt('同文竞速 · 先打完者胜', W / 2, 110, 11, C.muted, 'center', 400);
+  txt('好友对战', W / 2, ll.titleY, 26, C.ink, 'center', 800);
+  txt('同文竞速 · 先打完者胜', W / 2, ll.subY, 11, C.muted, 'center', 400);
 
-  cardEl(22, 132, W - 44, 116, 20);
-  txt('房间号', W / 2, 158, 10, C.muted, 'center', 400);
-  txt(G.pvp.roomId || '— — —', W / 2, 186, 30, C.navy, 'center', 800);
-  txt((G.mode === 'en' ? '英文' : '中文') + ' · ' + levelName(G.level), W / 2, 216, 11, C.muted, 'center', 400);
-  fillRR(W / 2 - 30, 230, 60, 3, 1.5, 'rgba(31,42,68,0.12)');
+  cardEl(22, ll.cardY, W - 44, ll.cardH, 20);
+  txt('房间号', W / 2, ll.cardY + 24, 10, C.muted, 'center', 400);
+  txt(G.pvp.roomId || '— — —', W / 2, ll.cardY + 54, 30, C.navy, 'center', 800);
+  txt((G.mode === 'en' ? '英文' : '中文') + ' · ' + levelName(G.level), W / 2, ll.cardY + 84, 11, C.muted, 'center', 400);
 
   // 双方
-  const y = 292;
+  const y = ll.vsY;
   const left = { x: 78, name: '我', color: C.navy, ready: G.pvp.ready };
   const right = { x: W - 78, name: G.pvp.peer.nickname || '等待加入', color: C.orange, ready: G.pvp.peerReady };
   [left, right].forEach((p) => {
@@ -374,7 +384,7 @@ function drawLobby() {
   txt('VS', W / 2, y, 12, C.navy, 'center', 800);
 
   const status = !G.pvp.peer.nickname ? '分享给好友，等他进来' : (!G.pvp.ready ? '点「就绪」，双方同时开打' : '等待双方就绪…');
-  txt(status, W / 2, 388, 12, C.muted, 'center', 400);
+  txt(status, W / 2, ll.statusY, 12, C.muted, 'center', 400);
 
   drawButtons();
 }
@@ -622,11 +632,9 @@ function drawKbPlaceholder() {
 
 function drawSystemKbPanel() {
   const lp = L.play;
-  ctx.fillStyle = 'rgba(34,32,29,0.04)';
+  ctx.fillStyle = 'rgba(34,32,29,0.05)';
   ctx.fillRect(0, lp.kbTop, W, lp.kbH);
-  cardEl(20, lp.kbTop + 24, W - 40, lp.kbH - 48, 16);
-  txt('系统输入法输入中', W / 2, lp.kbTop + lp.kbH / 2 - 12, 14, C.ink, 'center', 700);
-  txt('选好候选词自动前进 · 按「完成」提交', W / 2, lp.kbTop + lp.kbH / 2 + 12, 11, C.muted, 'center', 400);
+  txt('系统输入法', W / 2, lp.kbTop + 22, 11, C.muted, 'center', 600);
 }
 
 function drawKeyboard() {
@@ -726,7 +734,7 @@ function drawReadyDialog() {
 function drawCountdown() {
   ctx.fillStyle = 'rgba(20,16,12,0.46)';
   ctx.fillRect(0, 0, W, H);
-  const cx = W / 2, cy = H / 2 - 40;
+  const cx = W / 2, cy = (L.top + H - L.bottom) / 2 - 40;
   const frac = 1 - (G.countdown - Math.floor(G.countdown));
   const n = Math.ceil(G.countdown);
 
@@ -850,6 +858,24 @@ function drawNoKeyboard() {
   txt('请使用抖音 / 快手开发者工具运行', W / 2, H / 2 + 22, 12, C.muted);
 }
 
+function drawPaused() {
+  ctx.fillStyle = 'rgba(20,16,12,0.46)';
+  ctx.fillRect(0, 0, W, H);
+  const cy = (L.top + H - L.bottom) / 2;
+  cardEl(40, cy - 150, W - 80, 300, 22);
+  txt('已暂停', W / 2, cy - 96, 24, C.ink, 'center', 800);
+  txt('计时与对手都已冻结', W / 2, cy - 66, 11, C.muted, 'center', 400);
+
+  const prog = G.typedLen / Math.max(1, G.passage.length);
+  txt(Math.round(prog * 100) + '%', W / 2, cy - 20, 26, C.orange, 'center', 800);
+  txt('当前进度', W / 2, cy + 4, 10, C.muted, 'center', 400);
+  fillRR(70, cy + 18, W - 140, 6, 3, 'rgba(34,32,29,0.10)');
+  fillRR(70, cy + 18, Math.max(6, (W - 140) * prog), 6, 3, C.orange);
+  txt('已用 ' + G.elapsed.toFixed(1) + ' 秒 · 连击 ×' + G.combo, W / 2, cy + 44, 11, C.muted, 'center', 400);
+
+  drawButtons();
+}
+
 function render() {
   if (!ctx) return;
   if (!Platform.hasKeyboard) { drawNoKeyboard(); return; }
@@ -857,7 +883,8 @@ function render() {
   else if (G.state === 'LOBBY') drawLobby();
   else if (G.state === 'READY') { drawBattle(); drawReadyDialog(); }
   else if (G.state === 'COUNTDOWN') { drawBattle(); drawCountdown(); }
-  else if (G.state === 'PLAY') drawBattle();
+  else if (G.state === 'PLAY') { drawBattle(); drawButtons(); }
+  else if (G.state === 'PAUSED') { drawBattle(); drawPaused(); }
   else if (G.state === 'RESULT') drawResult();
 }
 
