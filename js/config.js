@@ -15,5 +15,5 @@ module.exports = {
   //   数字 → 所有难度统一，例：COUNTDOWN_SEC: 3
   //   对象 → 按难度分别设置，例：COUNTDOWN_SEC: { default: 3, easy: 2, normal: 3, hard: 3 }
   //   0    → 跳过倒计时，点「开始打字」立即开打
-  COUNTDOWN_SEC: 3,
+  COUNTDOWN_SEC: { default: 3, easy: 2, normal: 3, hard: 3 },
 };
