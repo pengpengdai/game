@@ -17,7 +17,7 @@
   const store = {};
   window.tt = {
     createCanvas: () => canvas,
-    getSystemInfoSync: () => ({ windowWidth: 375, windowHeight: 667, pixelRatio: 2, platform: 'devtools' }),
+    getSystemInfoSync: () => ({ windowWidth: 375, windowHeight: 667, pixelRatio: 2, platform: 'devtools', statusBarHeight: 20, safeArea: { top: 20, bottom: 647 } }),
     onTouchStart: () => {}, onTouchEnd: () => {}, onTouchMove: () => {},
     showKeyboard: () => {}, hideKeyboard: () => {}, setKeyboardValue: () => {},
     onKeyboardInput: () => {}, onKeyboardConfirm: () => {}, onKeyboardComplete: () => {},
@@ -62,6 +62,7 @@ try {
 }
 
 function showError(err) {
+  document.title = 'ERR:' + String(err && (err.stack || err.message || err)).slice(0,200).replace(/\n/g,' | ');
   const c = document.getElementById('cv');
   const x = c.getContext('2d');
   x.setTransform(1, 0, 0, 1, 0, 0);
@@ -134,6 +135,12 @@ function runScene() {
       toPlay('en');
       G.typedLen = 14; G.score = 320; G.combo = 0; G.flash = 0.4; G.aiProgress = 0.78;
       break;
+    case 'paused':
+      toPlay('en');
+      G.typedLen = 14; G.totalKeys = 14; G.score = 320; G.combo = 12; G.maxCombo = 12;
+      G.aiProgress = 0.42; G.elapsed = 9.5;
+      Game.pauseGame();
+      break;
     case 'result':
       G.state = 'RESULT'; G.result = 'win'; G.rank = 'B'; G.score = 1876;
       G.elapsed = 28.4; G.cpm = 186; G.accuracy = 98; G.maxCombo = 31;
@@ -158,6 +165,8 @@ function runScene() {
   }
 
   Render.render();
+  // 暂停页需要再画一次按钮（pauseGame 改了 buttons）
+  if (scene === 'paused') Render.render();
   window.__ready = true;
 }
 </script>
