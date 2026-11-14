@@ -258,6 +258,73 @@ async function main() {
     assert(G.state === 'PLAY' && G.buttons.some((b) => b.action === 'kb_show'), '中文模式对局中有「唤起键盘」按钮（state=' + G.state + ', btns=' + JSON.stringify(G.buttons.map((b) => b.action)) + '）');
   }
 
+  // 12. 中文带标点文章：标点自动跳过，不卡在标点位置（用户报告的 bug）
+  {
+    Game.startAiGame('cn', 'easy');
+    startRace();
+    advance(3.2);
+    G.passage = '千里之行,始于足下';
+    Game.input('千里之行');
+    assert(G.typedLen === 5, '输入「千里之行」后逗号自动通过，停在「始」前（typedLen=' + G.typedLen + '）');
+    Game.input('千里之行始于足下');   // 联想整句（无标点）一次上屏
+    assert(G.playerFinished && G.typedLen === 9, '联想整句一次上屏可完成全文（typedLen=' + G.typedLen + ', finished=' + G.playerFinished + '）');
+  }
+
+  // 13. 中文联想带标点/句号：全部忽略仍能完成
+  {
+    Game.startAiGame('cn', 'easy');
+    startRace();
+    advance(3.2);
+    G.passage = '千里之行,始于足下';
+    Game.input('千里之行，始于足下。');   // 联想自带中文逗号 + 句号
+    assert(G.playerFinished && G.typedLen === 9, '联想带标点整句可完成（typedLen=' + G.typedLen + '）');
+    assert(G.totalKeys === 8 && G.score > 0, '只统计实际打的 8 个字（totalKeys=' + G.totalKeys + ', score=' + G.score + '）');
+  }
+
+  // 14. 中文打完正文后，文章末尾标点自动通过 → 完成
+  {
+    Game.startAiGame('cn', 'easy');
+    startRace();
+    advance(3.2);
+    G.passage = '你好世界。';
+    Game.input('你好世界');
+    assert(G.playerFinished && G.typedLen === 5, '末尾句号自动通过并判完成（typedLen=' + G.typedLen + '）');
+  }
+
+  // 15. 英文模式标点不跳过（保持严格逐字比对；英文输入框每次清空，回调为新增片段）
+  {
+    Game.startAiGame('en', 'easy');
+    startRace('q26');
+    advance(3.2);
+    G.passage = 'a b, c';
+    Game.input('a'); Game.input(' '); Game.input('b'); Game.input(','); Game.input(' '); Game.input('c');
+    assert(G.playerFinished && G.typedLen === 6, '英文标点正常匹配可完成（typedLen=' + G.typedLen + '）');
+
+    Game.startAiGame('en', 'easy');
+    startRace('q26');
+    advance(3.2);
+    G.passage = 'a b, c';
+    Game.input('a'); Game.input(' '); Game.input('b');
+    Game.input('x');   // 应匹配逗号却输入 x → 判错
+    assert(G.typedLen === 3 && G.wrongKeys === 1, '英文多打判错，标点严格（typedLen=' + G.typedLen + ', wrongKeys=' + G.wrongKeys + '）');
+  }
+
+  // 16. 输入法拼音残留 → 上屏改写：不误判、可继续推进（用户报告场景的真实现场）
+  {
+    Game.startAiGame('cn', 'easy');
+    startRace();
+    advance(3.2);
+    G.passage = '千里之行,始于足下';
+    Game.input('qianlizhixing');           // 第一个词的拼音
+    assert(G.typedLen === 0, '纯拼音阶段不推进（typedLen=' + G.typedLen + '）');
+    Game.input('千里之行');                 // 上屏
+    assert(G.typedLen === 5, '上屏后推进到逗号之后（typedLen=' + G.typedLen + '）');
+    Game.input('千里之行shiyuzuxia');        // 第二个词的拼音（输入框累积拼音）
+    assert(G.typedLen === 5, '后续拼音不误推进、不误判错（typedLen=' + G.typedLen + '）');
+    Game.input('千里之行始于足下');            // 拼音被改写为汉字上屏
+    assert(G.playerFinished && G.typedLen === 9, '上屏改写后仍能正确完成（typedLen=' + G.typedLen + ', finished=' + G.playerFinished + '）');
+  }
+
   console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');
   process.exit(fail > 0 ? 1 : 0);
 }

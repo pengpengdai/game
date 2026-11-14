@@ -100,6 +100,7 @@ const G = {
   slowBtn: null,
   countdown: 0,
   lastInput: '',                       // 系统输入法上次的整段文本（中文增量用）
+  inputBase: 0,                        // 输入框里已消费掉的字符数（拼音残留/上屏改写用）
   pause: { total: 0, startedAt: 0 },   // 暂停累计时长 / 本次暂停起点
   fx: {
     lastCharAt: 0, comboAt: 0, comboValue: 0, resultAt: 0, startAt: 0,
@@ -212,6 +213,7 @@ function gotoHome() {
   G.pause.total = 0;
   G.pause.startedAt = 0;
   G.lastInput = '';
+  G.inputBase = 0;
   buildHomeButtons();
   Platform.hideKeyboard();
   Audio.play('click');
@@ -323,6 +325,7 @@ function startPlay() {
   G.pause.total = 0;
   G.pause.startedAt = 0;
   G.lastInput = '';
+  G.inputBase = 0;
   G.kb.visible = G.mode === 'en';
   G.kb.tip = '';
   G.kb.t9 = {};
@@ -523,36 +526,72 @@ function onNet(type, data) {
 }
 
 // ========== 输入 ==========
+/** 两个字符串的最长公共前缀长度 */
+function commonPrefixLen(a, b) {
+  const n = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < n && a[i] === b[i]) i++;
+  return i;
+}
+
+/** 中文模式：标点/空格自动跳过（文章标点自动通过，联想候选自带的标点忽略） */
+function isPunct(ch) {
+  if (!ch) return false;
+  return /[\u2000-\u206F\u3000-\u303F\uFE10-\uFE1F\uFE30-\uFE4F\uFF00-\uFFEF]/.test(ch)
+    || " \t\r\n,.;:!?()[]{}'\"`<>/\\|@#$%^&*+-=~_，。、；：！？（）《》〈〉【】“”‘’…—·".includes(ch);
+}
+
 function input(value) {
   if (G.state !== 'PLAY') return;
   if (G.gameMode === 'ai' && G.gameOver) return;
   if (G.gameMode === 'pvp' && G.playerFinished) return;
   if (typeof value !== 'string' || !value) return;
 
-  // 中文：系统输入法返回的是【整段文本】，只处理新增部分；删除操作忽略
+  // 中文：系统输入法返回的是【整段文本】，只处理新增部分
   let delta = value;
   if (G.mode === 'cn') {
     const prev = G.lastInput || '';
-    if (value.length < prev.length) { G.lastInput = ''; return; }
     if (value === prev) return;
-    delta = value.indexOf(prev) === 0 ? value.slice(prev.length) : value;
+    const common = commonPrefixLen(prev, value);
+    // 只有「value 恰好是 prev 的前缀」才是删除；长度变短也可能是输入法上屏（拼音→汉字）
+    if (value.length < prev.length && common === value.length) {
+      G.inputBase = Math.min(G.inputBase || 0, value.length);
+      G.lastInput = value;
+      return;
+    }
+    // 上屏可能把拼音字母改写成汉字（公共前缀变短），已消费位置不能超过公共前缀
+    const base = Math.min(G.inputBase || 0, common);
+    delta = value.slice(base);
+    G.inputBase = value.length;     // 本次内容全部消费
+    G.lastInput = value;
+  } else {
+    G.lastValue = value;
   }
-  G.lastValue = value;
-  if (G.mode === 'cn') G.lastInput = value;
+  if (G.mode === 'cn') G.lastValue = value;
 
   // 拼音输入阶段（纯字母）不参与比对
   if (G.mode === 'cn' && /^[a-zA-Z]+$/.test(delta)) return;
   if (!delta) return;
 
   const pass = G.passage;
-  let adv = 0, extra = 0;
-  for (let i = 0; i < delta.length; i++) {
-    const idx = G.typedLen + i;
-    if (idx < pass.length) {
-      if (delta[i] === pass[idx]) adv++;
-      else { extra = delta.length - i; break; }
-    } else extra++;
+  const cn = G.mode === 'cn';
+  let idx = G.typedLen, adv = 0, extra = 0, i = 0;
+
+  while (i < delta.length) {
+    // 中文：自动跳过文章里的标点/空格（不要求用户输入标点）
+    while (cn && idx < pass.length && isPunct(pass[idx])) idx++;
+    if (idx >= pass.length) {
+      // 正文已全部匹配：中文模式忽略剩余输入（联想常带句号/扩展句）；英文模式多打判错
+      if (!cn) extra = delta.length - i;
+      break;
+    }
+    // 中文：跳过输入/联想自带的标点
+    if (cn && isPunct(delta[i])) { i++; continue; }
+    if (delta[i] === pass[idx]) { idx++; adv++; i++; }
+    else { extra = delta.length - i; break; }
   }
+  // 中文：正文打完后，文章末尾的标点自动通过
+  while (cn && idx < pass.length && isPunct(pass[idx])) idx++;
 
   if (extra > 0) {
     G.wrongKeys += extra;
@@ -563,22 +602,25 @@ function input(value) {
     Audio.play('error');
     // 判错后清空输入框，避免错误文本反复堆积
     G.lastInput = '';
+    G.inputBase = 0;
     Platform.setKeyboardValue('');
     return;
   }
 
-  if (adv > 0) {
-    G.typedLen += adv;
+  if (idx > G.typedLen) {
+    G.typedLen = idx;
     G.totalKeys += adv;
-    G.combo += adv;
-    G.maxCombo = Math.max(G.maxCombo, G.combo);
-    G.score += adv * (10 + Math.min(G.combo, 50));
-    Audio.play('tick');
-    G.fx.lastCharAt = Date.now();
-    if (G.combo >= 5 && G.combo % 5 === 0) {
-      Audio.play('combo');
-      G.fx.comboAt = Date.now();
-      G.fx.comboValue = G.combo;
+    if (adv > 0) {
+      G.combo += adv;
+      G.maxCombo = Math.max(G.maxCombo, G.combo);
+      G.score += adv * (10 + Math.min(G.combo, 50));
+      Audio.play('tick');
+      G.fx.lastCharAt = Date.now();
+      if (G.combo >= 5 && G.combo % 5 === 0) {
+        Audio.play('combo');
+        G.fx.comboAt = Date.now();
+        G.fx.comboValue = G.combo;
+      }
     }
     if (G.mode === 'en') Platform.setKeyboardValue('');
     if (G.mode === 'cn' && !G.kb.visible) G.buttons = buildPlayButtons();
@@ -632,6 +674,7 @@ function doRevive() {
   G.reviveUsed = true;
   G.buttons = buildPlayButtons();
   G.lastInput = '';
+  G.inputBase = 0;
   // 把结算页停留的时间计入暂停，避免复活后计时跳增
   if (G.fx.resultAt) G.pause.total += Date.now() - G.fx.resultAt;
   G.kb.visible = G.mode === 'en';
@@ -766,6 +809,7 @@ function finishRound(myStats, peerStats) {
   buildResultButtons();
   G.fx.resultAt = Date.now();
   G.lastInput = '';
+  G.inputBase = 0;
   G.kb.visible = false;
   Platform.hideKeyboard();
   Audio.play('click');
