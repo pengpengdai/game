@@ -22,33 +22,54 @@ const PVP_REPORT_GAP = 120;   // 进度上报间隔 ms
 const RANK_EN = [[300, 'S'], [225, 'A'], [150, 'B'], [100, 'C'], [0, 'D']];
 const RANK_CN = [[120, 'S'], [90, 'A'], [60, 'B'], [36, 'C'], [0, 'D']];
 
+const KB_KEY = 'tp_kb_layout';                  // 记住用户上次选的键盘
+const KB_H = Math.round(Math.min(246, H * 0.37));
+const KB_TOP = H - KB_H;
+
+/** 开局倒计时秒数（来自 Config.COUNTDOWN_SEC：可统一、可按难度、可设 0 跳过） */
+function countdownFor(level) {
+  const c = Config.COUNTDOWN_SEC;
+  let v = 3;
+  if (typeof c === 'number') v = c;
+  else if (c && typeof c === 'object') {
+    v = typeof c[level] === 'number' ? c[level] : (typeof c.default === 'number' ? c.default : 3);
+  }
+  return Math.max(0, Number(v) || 0);
+}
+
 const LAYOUT = {
   W: W, H: H,
   home: {
-    titleY: 78, subY: 112,
-    modeLabelY: 150, modeBtnY: 178, modeBtnW: 130, modeBtnH: 46, modeGap: 16,
-    levelLabelY: 246, levelBtnY: 274, levelBtnW: 100, levelBtnH: 46, levelGap: 12,
-    bestY: 336,
-    startY: 366, startW: 240, startH: 52,
-    pvpY: 428, pvpW: 240, pvpH: 52,
-    lbBtnY: 492, lbBtnW: 110, lbBtnH: 40,
-    winY: 548, winH: 108,
-    soundX: W - 76, soundY: 18, soundW: 64, soundH: 30,
+    titleY: 66, subY: 96,
+    bestY: 124, bestH: 92,
+    modeLabelY: 236, modeBtnY: 252, modeBtnW: 148, modeBtnH: 44, modeGap: 12,
+    levelLabelY: 306, levelBtnY: 322, levelBtnW: 104, levelBtnH: 42, levelGap: 10,
+    startY: 378, startW: 260, startH: 56,
+    pvpY: 448, pvpW: 260, pvpH: 48,
+    lbBtnY: 508, lbBtnW: 128, lbBtnH: 44,
+    soundX: W - 66, soundY: 16, soundW: 54, soundH: 32,
+    lbModal: { x: 24, y: 120, w: W - 48, h: 386, closeY: 448 },
   },
   lobby: {
     titleY: 110, roomY: 160, statusY: 205,
     btnY: 300, btnW: 130, btnH: 50,
   },
   play: {
-    statY: 24, statH: 52, statGap: 8,
-    trackY: 94, laneH: 32, laneGap: 10, finishX: W - 30,
-    comboY: 178,
-    panelX: 20, panelY: 202, panelW: W - 40, panelH: 190,
-    echoY: H - 128, echoH: 50, hintY: H - 64,
+    headX: 14, headY: 12, headW: W - 28, headH: 94,
+    statY: 114, statH: 36, statGap: 8,
+    panelX: 14, panelY: 158, panelW: W - 28, panelH: KB_TOP - 158 - 8,
+    kbTop: KB_TOP, kbH: KB_H,
+  },
+  ready: {
+    cardX: 22, cardY: 92, cardW: W - 44, cardH: 340,
+    titleY: 134, subY: 162,
+    optY: 196, optH: 88, optPad: 18, optGap: 12,
+    startY: 312, startH: 52,
+    hintY: 388,
   },
   result: {
-    bannerY: 100, rankY: 196, rankR: 48,
-    statY: 286, scoreY: 396, btnY: 444, btnW: 110, btnH: 48,
+    bannerY: 110, rankY: 224, rankR: 44,
+    statY: 300, scoreY: 434, btnY: 470, btnW: 96, btnH: 48,
   },
 };
 
@@ -66,6 +87,16 @@ const G = {
   },
   reviveUsed: false, slowUsed: false, aiPauseUntil: 0,
   slowBtn: null,
+  countdown: 0,
+  fx: {
+    lastCharAt: 0, comboAt: 0, comboValue: 0, resultAt: 0, startAt: 0,
+    errAt: 0, ripple: null,
+  },
+  kb: {
+    layout: 'q26', visible: false, keys: [],
+    pressed: '', pressedUntil: 0, tip: '',
+    t9: {}, lastSlot: -1,
+  },
   lb: { showFriend: false, showGlobal: false, globalList: [], mine: null },
   soundOn: true,
   pendingJoinRoom: '',
@@ -82,6 +113,11 @@ function setButtons(list) { G.buttons = list; }
 // ========== 界面按钮 ==========
 function buildHomeButtons() {
   const L = LAYOUT.home;
+  const M = L.lbModal;
+  if (G.lb.showFriend || G.lb.showGlobal) {
+    setButtons([{ x: W / 2 - 70, y: M.closeY, w: 140, h: 44, label: '关闭', action: 'lb_close', primary: true }]);
+    return;
+  }
   const x0 = (W - (L.modeBtnW * 2 + L.modeGap)) / 2;
   const lx0 = (W - (L.levelBtnW * 3 + L.levelGap * 2)) / 2;
   const cx = W / 2;
@@ -91,11 +127,11 @@ function buildHomeButtons() {
     { x: lx0, y: L.levelBtnY, w: L.levelBtnW, h: L.levelBtnH, label: '简单', action: 'level:easy', active: G.level === 'easy' },
     { x: lx0 + L.levelBtnW + L.levelGap, y: L.levelBtnY, w: L.levelBtnW, h: L.levelBtnH, label: '普通', action: 'level:normal', active: G.level === 'normal' },
     { x: lx0 + (L.levelBtnW + L.levelGap) * 2, y: L.levelBtnY, w: L.levelBtnW, h: L.levelBtnH, label: '困难', action: 'level:hard', active: G.level === 'hard' },
-    { x: cx - L.startW / 2, y: L.startY, w: L.startW, h: L.startH, label: '开始比赛（AI）', action: 'start', primary: true },
+    { x: cx - L.startW / 2, y: L.startY, w: L.startW, h: L.startH, label: '开始比赛', action: 'start', primary: true },
     { x: cx - L.pvpW / 2, y: L.pvpY, w: L.pvpW, h: L.pvpH, label: '好友对战', action: 'pvp', secondary: true },
     { x: cx - L.lbBtnW - 6, y: L.lbBtnY, w: L.lbBtnW, h: L.lbBtnH, label: '好友榜', action: 'lb_friend', active: G.lb.showFriend },
     { x: cx + 6, y: L.lbBtnY, w: L.lbBtnW, h: L.lbBtnH, label: '全局榜', action: 'lb_global', active: G.lb.showGlobal },
-    { x: L.soundX, y: L.soundY, w: L.soundW, h: L.soundH, label: G.soundOn ? '音效:开' : '音效:关', action: 'sound', small: true },
+    { x: L.soundX, y: L.soundY, w: L.soundW, h: L.soundH, label: G.soundOn ? '♪ 开' : '♪ 关', action: 'sound', small: true },
   ]);
 }
 
@@ -139,6 +175,10 @@ function buildResultButtons() {
 // ========== 流程 ==========
 function bootstrap() {
   try { G.best = Number(Platform.getStorageSync(BEST_KEY)) || 0; } catch (e) { G.best = 0; }
+  try {
+    const savedKb = Platform.getStorageSync(KB_KEY);
+    if (savedKb === 'q9' || savedKb === 'q26') G.kb.layout = savedKb;
+  } catch (e) {}
   G.soundOn = Platform.getStorageSync('tp_sound_on') !== '0';
   buildHomeButtons();
   handleLaunchOptions(Platform.getLaunchOptionsSync());
@@ -154,6 +194,8 @@ function gotoHome() {
   G.state = 'HOME';
   G.gameMode = 'ai';
   G.pvp.waitingRematch = false;
+  G.kb.visible = false;
+  G.countdown = 0;
   buildHomeButtons();
   Platform.hideKeyboard();
   Audio.play('click');
@@ -166,10 +208,13 @@ function startAiGame(mode, level) {
   resetRound();
   G.passage = Words.pick(mode, level);
   G.aiSpeed = G.passage.length / AI_TIME[level];
-  G.state = 'PLAY';
-  G.buttons = [];
+  G.countdown = 0;
+  G.state = 'READY';
   G.slowBtn = null;
-  openKeyboard();
+  G.kb.visible = false;
+  buildKeyboard();
+  buildReadyButtons();
+  Audio.play('click');
 }
 
 function resetRound() {
@@ -190,6 +235,98 @@ function openKeyboard() {
     defaultValue: '', maxLength: 200, multiple: true,
     confirmHold: G.mode === 'cn', confirmType: 'done',
   });
+}
+
+// ---- 输入法选择 + 自绘键盘（英文模式）----
+function buildKeyboard() {
+  const keys = [];
+  const pad = 5, gap = 6;
+  const top = KB_TOP + 30;
+  if (G.kb.layout === 'q26') {
+    const kw = (W - pad * 2 - gap * 9) / 10;
+    const kh = Math.round((KB_H - 30 - pad - gap * 3 - 6) / 4);
+    const rows = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+    for (let ri = 0; ri < rows.length; ri++) {
+      const row = rows[ri];
+      const rw = row.length * kw + (row.length - 1) * gap;
+      const x0 = (W - rw) / 2;
+      for (let i = 0; i < row.length; i++) {
+        keys.push({ x: x0 + i * (kw + gap), y: top + ri * (kh + gap), w: kw, h: kh, type: 'char', chars: [row[i]], label: row[i] });
+      }
+    }
+    const by = top + 3 * (kh + gap);
+    const sw = Math.min(220, W * 0.58);
+    keys.push({ x: (W - sw) / 2, y: by, w: sw, h: kh, type: 'space', chars: [' '], label: '空格' });
+  } else {
+    const kw = (W - pad * 2 - gap * 2) / 3;
+    const kh = Math.round((KB_H - 30 - pad - gap * 2 - 6) / 3);
+    const groups = ['abc', 'def', 'ghi', 'jkl', 'mno', 'pqrs', 'tuv', 'wxyz'];
+    for (let i = 0; i < 9; i++) {
+      const c = i % 3, r = Math.floor(i / 3);
+      const x = pad + c * (kw + gap), y = top + r * (kh + gap);
+      if (i < 8) keys.push({ x, y, w: kw, h: kh, type: 't9', chars: groups[i].split(''), label: groups[i], slot: i });
+      else keys.push({ x, y, w: kw, h: kh, type: 'space', chars: [' '], label: '空格' });
+    }
+  }
+  G.kb.keys = keys;
+}
+
+function hitKey(x, y) {
+  const ks = G.kb.keys;
+  for (let i = 0; i < ks.length; i++) {
+    const k = ks[i];
+    if (x >= k.x && x <= k.x + k.w && y >= k.y && y <= k.y + k.h) return k;
+  }
+  return null;
+}
+
+function kbPress(k) {
+  G.kb.pressed = k.label;
+  G.kb.pressedUntil = Date.now() + 140;
+  G.fx.ripple = { x: k.x + k.w / 2, y: k.y + k.h / 2, at: Date.now() };
+  Platform.vibrateShort();
+  if (k.type === 'space') { G.kb.tip = ''; input(' '); return; }
+  if (k.type === 't9') {
+    if (G.kb.lastSlot !== k.slot) { G.kb.lastSlot = k.slot; G.kb.t9[k.slot] = -1; }
+    const ni = ((G.kb.t9[k.slot] === undefined ? -1 : G.kb.t9[k.slot]) + 1) % k.chars.length;
+    G.kb.t9[k.slot] = ni;
+    G.kb.tip = k.label + ' → ' + k.chars[ni];
+    input(k.chars[ni]);
+    return;
+  }
+  G.kb.tip = '';
+  input(k.chars[0]);
+}
+
+function startPlay() {
+  G.state = 'PLAY';
+  G.countdown = 0;
+  G.buttons = [];
+  G.startedAt = Date.now();
+  G.fx.startAt = Date.now();
+  G.kb.visible = G.mode === 'en';
+  G.kb.tip = '';
+  G.kb.t9 = {};
+  G.kb.lastSlot = -1;
+  if (G.mode === 'cn') openKeyboard();
+  Audio.play('click');
+}
+
+function buildReadyButtons() {
+  const R = LAYOUT.ready;
+  const optW = (R.cardW - R.optPad * 2 - R.optGap) / 2;
+  const optX1 = R.cardX + R.optPad;
+  const optX2 = optX1 + optW + R.optGap;
+  const list = [];
+  if (G.mode === 'en') {
+    list.push({ x: optX1, y: R.optY, w: optW, h: R.optH, label: '9键', action: 'kb:q9', active: G.kb.layout === 'q9', kb: 'q9' });
+    list.push({ x: optX2, y: R.optY, w: optW, h: R.optH, label: '26键', action: 'kb:q26', active: G.kb.layout === 'q26', kb: 'q26' });
+  }
+  list.push({
+    x: R.cardX + R.optPad, y: R.startY, w: R.cardW - R.optPad * 2, h: R.startH,
+    label: G.mode === 'en' ? '开始打字' : '开始打字（系统输入法）', action: 'start_race', primary: true, small: G.mode !== 'en',
+  });
+  setButtons(list);
 }
 
 // ---- PVP ----
@@ -280,11 +417,14 @@ function onNet(type, data) {
       G.level = data.level || G.level;
       G.passage = data.passage || '';
       resetRound();
-      G.state = 'PLAY';
+      G.countdown = 0;
+      G.state = 'READY';
       G.buttons = [];
       G.slowBtn = null;
+      G.kb.visible = false;
       G.pvp.waitingRematch = false;
-      openKeyboard();
+      buildKeyboard();
+      buildReadyButtons();
       Audio.play('click');
       break;
     case 'peer_progress':
@@ -344,6 +484,7 @@ function input(value) {
     G.wrongKeys += extra;
     G.combo = 0;
     G.flash = 0.5;
+    G.fx.errAt = Date.now();
     Platform.vibrateShort();
     Audio.play('error');
     Platform.setKeyboardValue('');
@@ -357,7 +498,12 @@ function input(value) {
     G.maxCombo = Math.max(G.maxCombo, G.combo);
     G.score += adv * (10 + Math.min(G.combo, 50));
     Audio.play('tick');
-    if (G.combo >= 5 && G.combo % 5 === 0) Audio.play('combo');
+    G.fx.lastCharAt = Date.now();
+    if (G.combo >= 5 && G.combo % 5 === 0) {
+      Audio.play('combo');
+      G.fx.comboAt = Date.now();
+      G.fx.comboValue = G.combo;
+    }
     if (G.mode === 'en') Platform.setKeyboardValue('');
 
     if (G.gameMode === 'pvp') reportProgress();
@@ -408,7 +554,11 @@ function doRevive() {
   G.overDelay = 0;
   G.reviveUsed = true;
   G.buttons = [];
-  openKeyboard();
+  G.kb.visible = G.mode === 'en';
+  G.kb.tip = '';
+  G.kb.t9 = {};
+  G.kb.lastSlot = -1;
+  if (G.mode === 'cn') openKeyboard();
   Audio.play('click');
   Platform.showToast('复活成功，加油！');
 }
@@ -458,6 +608,12 @@ function rematchPvp() {
 // ========== 每帧更新 ==========
 function update(dt) {
   if (G.flash > 0) G.flash -= dt;
+
+  if (G.state === 'COUNTDOWN') {
+    G.countdown -= dt;
+    if (G.countdown <= 0) { G.countdown = 0; startPlay(); }
+    return;
+  }
 
   if (G.state === 'PLAY') {
     G.elapsed = (Date.now() - G.startedAt) / 1000;
@@ -526,6 +682,8 @@ function finishRound(myStats, peerStats) {
   });
 
   buildResultButtons();
+  G.fx.resultAt = Date.now();
+  G.kb.visible = false;
   Platform.hideKeyboard();
   Audio.play('click');
 }
@@ -566,6 +724,11 @@ function tap(x, y) {
     const b = G.slowBtn;
     if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { slowAi(); return; }
   }
+  // 自绘键盘
+  if (G.state === 'PLAY' && G.kb.visible) {
+    const k = hitKey(x, y);
+    if (k) { kbPress(k); return; }
+  }
   for (let i = 0; i < G.buttons.length; i++) {
     const b = G.buttons[i];
     if (x < b.x || x > b.x + b.w || y < b.y || y > b.y + b.h) continue;
@@ -582,6 +745,21 @@ function tap(x, y) {
     else if (a === 'lb_friend') toggleFriendLb();
     else if (a === 'lb_global') openGlobalLb();
     else if (a === 'sound') toggleSound();
+    else if (a === 'lb_close') { G.lb.showFriend = false; G.lb.showGlobal = false; buildHomeButtons(); }
+    else if (a === 'kb:q9' || a === 'kb:q26') {
+      G.kb.layout = a === 'kb:q9' ? 'q9' : 'q26';
+      Platform.setStorageSync(KB_KEY, G.kb.layout);
+      buildKeyboard();
+      buildReadyButtons();
+      Audio.play('click');
+    }
+    else if (a === 'start_race') {
+      const sec = countdownFor(G.level);
+      G.buttons = [];
+      Audio.play('click');
+      if (sec <= 0) startPlay();          // 配置为 0 → 跳过倒计时直接开打
+      else { G.state = 'COUNTDOWN'; G.countdown = sec; }
+    }
     else if (a.indexOf('mode:') === 0) { G.mode = a.slice(5); buildHomeButtons(); }
     else if (a.indexOf('level:') === 0) { G.level = a.slice(6); buildHomeButtons(); }
     return;
@@ -616,5 +794,5 @@ function firstTouch() {
 
 module.exports = {
   G, bootstrap, gotoHome, startAiGame, startPvpLobby, pvpJoin, pvpReady, pvpLeave,
-  update, tap, input, confirmClear, onNet, firstTouch, handleLaunchOptions,
+  update, tap, input, confirmClear, onNet, firstTouch, handleLaunchOptions, startPlay, buildKeyboard,
 };

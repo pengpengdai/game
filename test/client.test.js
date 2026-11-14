@@ -1,6 +1,5 @@
 // 客户端引擎模拟测试：mock tt API + 假 WebSocket
-// 覆盖：AI 胜负/最高分/分享、胜利不被 AI 反超（回归）、看广告复活（服务端不可用→本地限次兜底）、
-//      PVP 大厅→就绪→开局→打完→服务端判胜→再战
+// 覆盖：输入方式弹框、倒计时、自绘键盘(26键/9键)、AI 胜负、复活、PVP 全链路
 const storage = {};
 let lastShare = null, cloudKv = null;
 let adCloseCb = null;
@@ -33,13 +32,13 @@ global.tt = {
   getLaunchOptionsSync: () => ({}),
   onShow: () => {}, onHide: () => {},
   request: (opt) => {
-    const u = opt.url.replace('https://your-domain.com', '');
+    const u = opt.url.replace(/^https?:\/\/[^/]+/, '');
     const respond = (body) => opt.success({ statusCode: 200, data: JSON.stringify(body) });
     const failReq = () => opt.fail({ errMsg: 'mock network down' });
     if (u.indexOf('/api/login') === 0) respond({ token: 'tok-1', user: { id: 1, nickname: 'T' } });
     else if (u.indexOf('/api/rooms') === 0 && opt.method === 'POST') respond({ roomId: 'R1' });
     else if (u.indexOf('/api/records') === 0) respond({ ok: true });
-    else if (u.indexOf('/api/revive/confirm') === 0) failReq();   // 模拟服务端不可用 → 走本地限次
+    else if (u.indexOf('/api/revive/confirm') === 0) failReq();
     else if (u.indexOf('/api/leaderboard') === 0) respond({ list: [], mine: null });
     else failReq();
   },
@@ -59,9 +58,9 @@ global.tt = {
 
 const Game = require('../js/engine');
 const Net = require('../js/net');
+const Config = require('../js/config');
 const G = Game.G;
 
-// 与 game.js 一致：网络消息 → 引擎
 ['joined', 'peer_joined', 'peer_ready', 'game_start', 'peer_progress',
  'peer_finish', 'result', 'peer_left', 'peer_rematch', 'error'].forEach((type) => {
   Net.on(type, (data) => Game.onNet(type, data));
@@ -72,51 +71,106 @@ function assert(cond, msg) {
   if (cond) { pass++; console.log('  ✓ ' + msg); }
   else { fail++; console.log('  ✗ ' + msg); }
 }
+const tick = (ms) => new Promise((r) => setTimeout(r, ms || 10));
 const tapAction = (action) => {
   const b = G.buttons.find((x) => x.action === action);
   if (!b) return false;
   Game.tap(b.x + 5, b.y + 5);
   return true;
 };
-const tick = (ms) => new Promise((r) => setTimeout(r, ms || 10));
-// 用真实帧步长推进
 const advance = (sec) => { for (let i = 0; i < Math.ceil(sec / 0.05); i++) Game.update(0.05); };
+
+// 走完 READY → 倒计时 → PLAY
+function startRace(layout) {
+  if (layout && G.mode === 'en') tapAction('kb:' + layout);
+  return tapAction('start_race');
+}
 
 async function main() {
   Game.bootstrap();
 
-  // 1. AI 单机胜利 + 最高分 + 好友榜上报 + 分享
+  // 1. 进入打字页：先弹输入方式选择，键盘不出现
   Game.startAiGame('en', 'easy');
+  assert(G.state === 'READY', '进入打字页为 READY（弹输入方式选择）');
+  assert(G.kb.visible === false, '未点开始前不显示键盘');
+  assert(G.buttons.some((b) => b.action === 'kb:q9') && G.buttons.some((b) => b.action === 'kb:q26'), '弹框可选 9 键 / 26 键');
+
+  // 2. 选 26 键 → 开始 → 倒计时 → 键盘出现
+  gaming: {
+    startRace('q26');
+    assert(G.state === 'COUNTDOWN' && G.countdown > 2.9, '点开始进入 3 秒倒计时');
+    advance(3.2);
+    assert(G.state === 'PLAY', '倒计时结束进入 PLAY');
+    assert(G.kb.visible === true, '开始后键盘出现');
+    assert(G.kb.layout === 'q26' && G.kb.keys.length === 27, '26 键布局：26 字母 + 空格');
+  }
+
+  // 3. 自绘键盘点击可推进
+  {
+    const before = G.typedLen;
+    const target = G.passage[before];
+    const k = G.kb.keys.find((x) => x.type === 'char' && x.chars[0] === target);
+    assert(!!k, '键盘上能找到下一个字符键：' + JSON.stringify(target));
+    Game.tap(k.x + k.w / 2, k.y + k.h / 2);
+    assert(G.typedLen === before + 1 && G.score > 0, '点键盘字符 → 推进并加分');
+  }
+
+  // 4. 切成 9 键：布局重建 + T9 连点循环
+  {
+    Game.startAiGame('en', 'easy');
+    startRace('q9');
+    advance(3.2);
+    assert(G.kb.layout === 'q9' && G.kb.keys.length === 9, '9 键布局：8 组字母 + 空格');
+    const before = G.typedLen;
+    const target = G.passage[before];
+    const k = G.kb.keys.find((x) => x.type === 't9' && x.chars.indexOf(target) >= 0);
+    assert(!!k, '9 键能找到含目标字符的分组');
+    let taps = 0;
+    while (G.typedLen === before && taps < 5) { Game.tap(k.x + k.w / 2, k.y + k.h / 2); taps++; }
+    assert(G.typedLen === before + 1 && taps <= 4, '9 键连点循环打到目标字符（' + taps + ' 次）');
+  }
+
+  // 5. AI 单机胜利 + 最高分 + 好友榜上报 + 分享
+  Game.startAiGame('en', 'easy');
+  startRace('q26');
+  advance(3.2);
   const p1 = G.passage;
   for (let i = 0; i < p1.length; i++) Game.input(p1[i]);
-  advance(2);   // 越过 1.2s 胜利延迟
+  advance(2);
   assert(G.state === 'RESULT' && G.result === 'win', 'AI 局打完 → 胜利结算');
   assert(Number(storage['tp_best']) === G.best && G.best > 0, '最高分已持久化: ' + G.best);
   assert(cloudKv && cloudKv[0] && cloudKv[0].key === 'best', '好友榜托管数据已上报');
   assert(tapAction('share') && lastShare && lastShare.title, '分享战绩可用');
+  assert(G.kb.visible === false, '结算后键盘收起');
 
-  // 2. 回归：玩家胜利后 AI 不再反超（修复验证）
+  // 6. 回归：胜利延迟窗口内 AI 被冻结
   Game.startAiGame('en', 'easy');
-  G.aiSpeed = 1;   // 若 AI 在 1.2s 延迟内继续推进 → 会超过终点
+  startRace('q26');
+  advance(3.2);
+  G.aiSpeed = 1;
   const p2 = G.passage;
   for (let i = 0; i < p2.length; i++) Game.input(p2[i]);
   advance(2);
   assert(G.result === 'win' && G.state === 'RESULT', '胜利延迟窗口内 AI 被冻结，结果不被反超');
 
-  // 3. AI 失败 → 看广告复活（服务端不可用 → 本地限次兜底）
+  // 7. AI 失败 → 看广告复活
   Game.startAiGame('cn', 'normal');
+  assert(G.state === 'READY' && G.buttons.length === 1 && G.buttons[0].action === 'start_race', '中文模式直接开始（系统输入法）');
+  startRace();
+  advance(3.2);
+  assert(G.state === 'PLAY' && G.kb.visible === false, '中文模式用系统键盘，不显示自绘键盘');
   G.aiSpeed = 99999;
   advance(7);
   assert(G.state === 'RESULT' && G.result === 'lose', 'AI 先到 → 失败结算');
   assert(tapAction('revive'), '结算页出现「看广告复活」按钮');
   adComplete();
-  await tick();   // 复活链路是 promise 链，等微任务落地
+  await tick();
   assert(G.state === 'PLAY' && G.gameOver === false, '复活成功回到对局');
   assert(Math.abs(G.aiProgress - 0.6) < 0.01, '复活后 AI 进度回退 60%');
   const localKey = Object.keys(storage).find((k) => k.indexOf('tp_revive_') === 0);
   assert(!!localKey && Number(storage[localKey]) === 1, '本地限次计数生效（服务端不可用兜底）');
 
-  // 4. PVP：建房 → 入房 → 就绪 → 开局 → 打完 → 服务端判胜 → 再战
+  // 8. PVP：建房 → 入房 → 就绪 → 开局(READY) → 开始 → 打完 → 服务端判胜 → 再战
   await Game.startPvpLobby();
   await tick();
   assert(G.state === 'LOBBY', '进入对战大厅（当前: ' + G.state + '）');
@@ -128,7 +182,10 @@ async function main() {
   assert(tapAction('ready'), '大厅有「就绪」按钮');
   inject({ type: 'peer_ready' });
   inject({ type: 'game_start', passage: 'practice makes perfect', mode: 'en', level: 'easy', seed: 1 });
-  assert(G.state === 'PLAY' && G.passage === 'practice makes perfect', '收到开局文章（服务端下发）');
+  assert(G.state === 'READY' && G.passage === 'practice makes perfect', '收到开局文章 → READY（可与好友同步选键盘）');
+  startRace('q26');
+  advance(3.2);
+  assert(G.state === 'PLAY', 'PVP 倒计时后开打');
   const p4 = G.passage;
   for (let i = 0; i < p4.length; i++) Game.input(p4[i]);
   assert(G.playerFinished === true, '打完全文 → 等待服务端结果');
@@ -138,6 +195,31 @@ async function main() {
   assert(G.state === 'RESULT' && G.result === 'win', '服务端判胜 → 结算页');
   assert(tapAction('rematch'), '胜局可发起再战');
   assert(G.pvp.waitingRematch && fakeSocket.sent.some((m) => m.type === 'rematch'), '再战请求已发送');
+
+  // 9. 倒计时可配置（统一数值 / 按难度 / 0 跳过）
+  Config.COUNTDOWN_SEC = 1;
+  Game.startAiGame('en', 'easy');
+  startRace('q26');
+  assert(G.state === 'COUNTDOWN' && G.countdown === 1, '倒计时统一配置为 1 秒');
+  advance(1.1);
+  assert(G.state === 'PLAY', '1 秒后自动开打');
+
+  Config.COUNTDOWN_SEC = { default: 3, easy: 2, hard: 5 };
+  Game.startAiGame('en', 'easy');
+  startRace('q26');
+  assert(G.countdown === 2, '按难度配置：简单 2 秒');
+  Game.startAiGame('en', 'hard');
+  startRace('q26');
+  assert(G.countdown === 5, '按难度配置：困难 5 秒');
+  Game.startAiGame('cn', 'normal');
+  startRace();
+  assert(G.countdown === 3, '按难度配置：未配置的难度用 default 3 秒');
+
+  Config.COUNTDOWN_SEC = 0;
+  Game.startAiGame('en', 'easy');
+  startRace('q26');
+  assert(G.state === 'PLAY' && G.kb.visible === true, '配置为 0 → 跳过倒计时，键区直接可用');
+  Config.COUNTDOWN_SEC = 3;
 
   console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');
   process.exit(fail > 0 ? 1 : 0);

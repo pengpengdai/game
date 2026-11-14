@@ -10,4 +10,10 @@ module.exports = {
   AD_REVIVE: 'adunit-revive-placeholder',     // 失败复活
   AD_SLOW: 'adunit-slow-placeholder',         // 对手减速
   AD_REMATCH: 'adunit-rematch-placeholder',   // 对战失败再战
+
+  // 开局倒计时（秒）。三种写法都支持：
+  //   数字 → 所有难度统一，例：COUNTDOWN_SEC: 3
+  //   对象 → 按难度分别设置，例：COUNTDOWN_SEC: { default: 3, easy: 2, normal: 3, hard: 3 }
+  //   0    → 跳过倒计时，点「开始打字」立即开打
+  COUNTDOWN_SEC: 3,
 };

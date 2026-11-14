@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>打字比赛 · 页面预览</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #2b2622; }
+  #cv { display: block; width: 375px; height: 667px; margin: 0 auto; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<script>
+/* ---------- 小游戏 API shim（浏览器预览用）---------- */
+(function () {
+  const canvas = document.getElementById('cv');
+  const store = {};
+  window.tt = {
+    createCanvas: () => canvas,
+    getSystemInfoSync: () => ({ windowWidth: 375, windowHeight: 667, pixelRatio: 2, platform: 'devtools' }),
+    onTouchStart: () => {}, onTouchEnd: () => {}, onTouchMove: () => {},
+    showKeyboard: () => {}, hideKeyboard: () => {}, setKeyboardValue: () => {},
+    onKeyboardInput: () => {}, onKeyboardConfirm: () => {}, onKeyboardComplete: () => {},
+    getStorageSync: (k) => (store[k] === undefined ? '' : store[k]),
+    setStorageSync: (k, v) => { store[k] = v; },
+    vibrateShort: () => {}, shareAppMessage: () => {},
+    login: ({ success }) => success({ code: 'preview' }),
+    getLaunchOptionsSync: () => ({}),
+    onShow: () => {}, onHide: () => {},
+    request: (o) => o.fail && o.fail({ errMsg: 'preview-no-net' }),
+    connectSocket: () => ({ onOpen: () => {}, onMessage: () => {}, onClose: () => {}, onError: () => {}, send: () => {}, close: () => {} }),
+    createRewardedVideoAd: () => ({ load: () => Promise.resolve(), show: () => Promise.resolve(), onClose: () => {}, onError: () => {} }),
+    setUserCloudStorage: () => {}, getOpenDataContext: () => null,
+    createInnerAudioContext: () => ({ src: '', loop: false, volume: 1, play: () => {}, stop: () => {} }),
+    setInnerAudioOption: () => {}, showToast: () => {},
+  };
+})();
+
+/* ---------- 极简 CommonJS 加载器（同步 XHR）---------- */
+(function () {
+  const cache = {};
+  window.loadModule = function (name) {
+    const key = name.replace(/^\.\//, '').replace(/\.js$/, '');
+    if (cache[key]) return cache[key].exports;
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', '../js/' + key + '.js', false);
+    xhr.send();
+    if (xhr.status !== 200 && xhr.status !== 0) throw new Error('load fail: ' + key);
+    const mod = { exports: {} };
+    cache[key] = mod;
+    const req = (p) => window.loadModule(p);
+    new Function('require', 'module', 'exports', xhr.responseText)(req, mod, mod.exports);
+    return mod.exports;
+  };
+})();
+
+/* ---------- 场景 ---------- */
+try {
+  runScene();
+} catch (err) {
+  showError(err);
+}
+
+function showError(err) {
+  const c = document.getElementById('cv');
+  const x = c.getContext('2d');
+  x.setTransform(1, 0, 0, 1, 0, 0);
+  x.fillStyle = '#fff';
+  x.fillRect(0, 0, c.width, c.height);
+  x.fillStyle = '#c00';
+  x.font = '16px monospace';
+  x.textAlign = 'left';
+  const msg = String(err && (err.stack || err.message || err));
+  msg.split('\n').slice(0, 12).forEach((line, i) => x.fillText(line.slice(0, 60), 16, 40 + i * 22));
+}
+
+function runScene() {
+  const Game = window.loadModule('engine');
+  const Render = window.loadModule('render');
+  const G = Game.G;
+  const q = new URLSearchParams(location.search);
+  const scene = q.get('s') || 'home';
+  const layout = q.get('kb') || 'q26';
+
+  Game.bootstrap();
+  G.best = 1876;
+  const fixed = 'the quick brown fox jumps over the lazy dog';
+
+  function toPlay(mode) {
+    G.mode = mode;
+    Game.startAiGame(mode, 'easy');
+    G.passage = mode === 'en' ? fixed : '生活不止眼前的苟且，还有诗和远方的田野。';
+    G.kb.layout = layout;
+    Game.buildKeyboard();
+    if (mode === 'en') {
+      const b = G.buttons.find((x) => x.action === 'kb:' + layout);
+      if (b) Game.tap(b.x + 4, b.y + 4);
+    }
+    Game.startPlay();
+  }
+
+  switch (scene) {
+    case 'ready':
+      Game.startAiGame('en', 'easy');
+      G.passage = fixed;
+      G.kb.layout = layout;
+      Game.buildKeyboard();
+      G.buttons.forEach((b) => { if (b.kb) b.active = b.kb === layout; });
+      break;
+    case 'readycn':
+      Game.startAiGame('cn', 'easy');
+      G.passage = '生活不止眼前的苟且，还有诗和远方的田野。';
+      break;
+    case 'countdown':
+      G.mode = 'en';
+      Game.startAiGame('en', 'easy');
+      G.passage = fixed;
+      G.kb.layout = layout;
+      Game.buildKeyboard();
+      G.state = 'COUNTDOWN';
+      G.countdown = 2.6;
+      break;
+    case 'play':
+      toPlay('en');
+      G.typedLen = 14; G.totalKeys = 14; G.score = 320; G.combo = 12; G.maxCombo = 12;
+      G.aiProgress = 0.42; G.elapsed = 9.5;
+      break;
+    case 'playcn':
+      toPlay('cn');
+      G.typedLen = 6; G.totalKeys = 7; G.wrongKeys = 1; G.score = 120; G.combo = 0;
+      G.aiProgress = 0.55; G.elapsed = 8;
+      break;
+    case 'playerr':
+      toPlay('en');
+      G.typedLen = 14; G.score = 320; G.combo = 0; G.flash = 0.4; G.aiProgress = 0.78;
+      break;
+    case 'result':
+      G.state = 'RESULT'; G.result = 'win'; G.rank = 'B'; G.score = 1876;
+      G.elapsed = 28.4; G.cpm = 186; G.accuracy = 98; G.maxCombo = 31;
+      G.gameMode = 'ai';
+      G.buttons = [
+        { x: 28, y: 486, w: 96, h: 48, label: '再来一局', action: 'again', primary: true },
+        { x: 132, y: 486, w: 96, h: 48, label: '分享战绩', action: 'share' },
+        { x: 236, y: 486, w: 96, h: 48, label: '返回首页', action: 'home' },
+      ];
+      break;
+    case 'lobby':
+      G.state = 'LOBBY'; G.gameMode = 'pvp'; G.pvp.roomId = 'R1X43Q8';
+      G.pvp.peer = { nickname: '小明', avatar: '' };
+      G.buttons = [
+        { x: 24, y: 300, w: 108, h: 46, label: '邀请好友', action: 'invite', primary: true },
+        { x: 144, y: 300, w: 108, h: 46, label: '就绪', action: 'ready', primary: true },
+        { x: 264, y: 300, w: 108, h: 46, label: '离开', action: 'leave' },
+      ];
+      break;
+    default:
+      break;
+  }
+
+  Render.render();
+  window.__ready = true;
+}
+</script>
+</body>
+</html>

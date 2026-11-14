@@ -54,6 +54,17 @@ node test/client.test.js      # 20 项
 node server/test/e2e.js       # 13 项
 ```
 
+## 可调参数（js/config.js）
+
+```js
+// 开局倒计时，三种写法
+COUNTDOWN_SEC: 3;                                  // 所有难度统一 3 秒
+COUNTDOWN_SEC: { default: 3, easy: 2, hard: 5 };   // 按难度，未配的用 default
+COUNTDOWN_SEC: 0;                                  // 跳过倒计时，点开始直接开打
+```
+
+其他可调项：`SERVER_BASE`（服务端地址）、`AD_REVIVE` / `AD_SLOW` / `AD_REMATCH`（广告位）。
+
 ## 上线前必改
 
 1. `js/config.js` → `SERVER_BASE` 换成已备案 HTTPS/WSS 域名；三个广告位 ID 换成真实值。

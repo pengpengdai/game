@@ -1,11 +1,11 @@
 {
-  "appid": "tt0000000000000000",
+  "appid": "tt31d44769afa8256202",
   "compileType": "game",
   "projectname": "typing-race",
   "setting": {
     "es6": true,
     "minified": true,
-    "urlCheck": true,
+    "urlCheck": false,
     "postcss": true
   }
 }
