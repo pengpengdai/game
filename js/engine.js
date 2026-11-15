@@ -241,6 +241,11 @@ function submitChallengeCode(value) {
   }).catch(() => Platform.showToast('网络异常，稍后再试'));
 }
 
+/** 顶部左上「返回」按钮（各页面通用） */
+function backBtn(action) {
+  return { x: 10, y: TOP_INSET + 6, w: 34, h: 30, label: '‹', action: action || 'home', small: true, ghost: true };
+}
+
 function buildMainButtons() {
   const M = LAYOUT.main;
   setButtons([
@@ -263,7 +268,14 @@ function startDrop(lang) {
 }
 
 function buildDropButtons() {
-  setButtons([{ x: W - 70, y: TOP_INSET + 8, w: 56, h: 30, label: '退出', action: 'drop_quit', small: true }]);
+  const bottom = H - BOTTOM_INSET;
+  setButtons([
+    backBtn('drop_quit'),
+    {
+      x: 20, y: Math.max(Drop.S.lineY + 26, bottom - 96), w: W - 40, h: 44,
+      label: '点此唤起键盘', action: 'kb_show', secondary: true,
+    },
+  ]);
 }
 
 /** 掉落玩法结束：星星耗尽 */
@@ -285,8 +297,8 @@ function buildDropResultButtons() {
   const list = [];
   if (!Drop.S.revived) list.push(mk(0, 0, '看广告复活', 'drop_revive', true), mk(1, 0, '再来一局', 'drop_again'));
   else list.push(mk(0, 0, '再来一局', 'drop_again', true), mk(1, 0, '返回首页', 'drop_home'));
-  if (Drop.S.revived) setButtons(list);
-  else setButtons([list[0], list[1], mk(0, 1, '返回首页', 'drop_home')]);
+  if (Drop.S.revived) setButtons([list[0], list[1], backBtn('drop_home')]);
+  else setButtons([list[0], list[1], mk(0, 1, '返回首页', 'drop_home'), backBtn('drop_home')]);
 }
 
 /** 看广告复活：星星回到 3 颗，继续本局 */
@@ -324,6 +336,7 @@ function buildRaceButtons() {
     { x: cx - 48, y: L.lbBtnY, w: 96, h: L.lbBtnH, label: '全局榜', action: 'lb_global', active: G.lb.showGlobal },
     { x: cx + 56, y: L.lbBtnY, w: 96, h: L.lbBtnH, label: '挑战码', action: 'challenge_entry' },
     { x: L.soundX, y: L.soundY, w: L.soundW, h: L.soundH, label: G.soundOn ? '♪ 开' : '♪ 关', action: 'sound', small: true },
+    backBtn('home'),
   ]);
 }
 
@@ -356,8 +369,8 @@ function buildResultButtons() {
     const mk2 = (col, row, label, action, primary) => ({
       x: 22 + col * (bw + gap), y: L.btnY + row * 58, w: bw, h: 46, label, action, primary: !!primary,
     });
-    if (!win) setButtons([mk2(0, 0, '看广告复活', 'revive', true), mk2(1, 0, '挑战好友', 'make_challenge'), mk2(0, 1, '再来一局', 'again'), mk2(1, 1, '返回首页', 'home')]);
-    else setButtons([mk2(0, 0, '再来一局', 'again', true), mk2(1, 0, '挑战好友', 'make_challenge'), mk2(0, 1, '分享战绩', 'share'), mk2(1, 1, '返回首页', 'home')]);
+    if (!win) setButtons([mk2(0, 0, '看广告复活', 'revive', true), mk2(1, 0, '挑战好友', 'make_challenge'), mk2(0, 1, '再来一局', 'again'), mk2(1, 1, '返回首页', 'home'), backBtn('home')]);
+    else setButtons([mk2(0, 0, '再来一局', 'again', true), mk2(1, 0, '挑战好友', 'make_challenge'), mk2(0, 1, '分享战绩', 'share'), mk2(1, 1, '返回首页', 'home'), backBtn('home')]);
   } else {
     if (G.pvp.waitingRematch) {
       setButtons([{ x: W / 2 - L.btnW / 2, y: L.btnY, w: L.btnW, h: L.btnH, label: '返回首页', action: 'home' }]);
@@ -573,12 +586,13 @@ function buildReadyButtons() {
     x: R.cardX + R.optPad, y: R.startY, w: R.cardW - R.optPad * 2, h: R.startH,
     label: G.mode === 'en' ? '开始打字' : '开始打字（系统输入法）', action: 'start_race', primary: true, small: G.mode !== 'en',
   });
+  list.push(backBtn('home'));
   setButtons(list);
 }
 
 /** 对局中的悬浮按钮：暂停；中文模式额外提供「唤起键盘」 */
 function buildPlayButtons() {
-  const list = [];
+  const list = [backBtn('home')];
   if (G.gameMode === 'ai') {
     const p = LAYOUT.play.pauseBtn;
     list.push({ x: p.x, y: p.y, w: p.w, h: p.h, label: 'Ⅱ', action: 'pause', small: true, circle: true });
@@ -1219,8 +1233,9 @@ function tap(x, y) {
     return;
   }
 
-  // 没点到按钮：中文模式下点任意空白处重新唤起系统键盘
-  if (G.state === 'PLAY' && G.mode === 'cn') openKeyboard();
+  // 没点到按钮：中文 / 掉落模式点任意空白处重新唤起系统键盘
+  if (G.state === 'DROP') openKeyboard();
+  else if (G.state === 'PLAY' && G.mode === 'cn') openKeyboard();
 }
 
 function toggleSound() {

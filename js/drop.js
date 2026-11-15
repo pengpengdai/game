@@ -21,6 +21,15 @@ const HUD_H = 66;
 const LINE_GAP = 92;
 const LEVEL_STEP = 12;      // 每关需要消除的词数
 
+/** 关卡难度：第 1 关非常轻松，逐关加速 */
+function tuning(level) {
+  return {
+    gap: Math.max(0.8, 2.6 - (level - 1) * 0.30),   // 生成间隔（秒）
+    speed: 16 + (level - 1) * 9,                    // 下落速度 px/s
+    maxWords: Math.min(9, 3 + level),               // 同屏上限
+  };
+}
+
 const S = {
   on: false, over: false, lang: 'cn',
   score: 0, stars: MAX_STARS, maxStars: MAX_STARS,
@@ -28,6 +37,7 @@ const S = {
   combo: 0, maxCombo: 0,
   words: [], buf: '', spawnAcc: 0, flash: 0,
   popups: [], revived: false, clearAt: 0,
+  sparks: [], flyStars: [], shake: 0,
   lineY: H - BOTTOM - LINE_GAP,
   topY: TOP + HUD_H,
   W: W, H: H, TOP: TOP, BOTTOM: BOTTOM,
@@ -73,6 +83,7 @@ function start(lang) {
   S.combo = 0; S.maxCombo = 0;
   S.words = []; S.buf = ''; S.spawnAcc = 0; S.flash = 0;
   S.popups = []; S.revived = false; S.clearAt = 0;
+  S.sparks = []; S.flyStars = []; S.shake = 0; S.pops = [];
   spawn();
   spawn();
 }
@@ -84,6 +95,14 @@ function miss(word) {
   Platform.vibrateHeavy();
   Audio.play('error');
   S.popups.push({ text: '-1 ★', x: word.x + word.w / 2, y: S.lineY - 10, at: Date.now(), color: 'red' });
+  S.shake = 0.35;
+  for (let i = 0; i < 8; i++) {
+    S.sparks.push({
+      x: word.x + word.w / 2, y: S.lineY - 12,
+      vx: (Math.random() - 0.5) * 150, vy: -40 - Math.random() * 90,
+      life: 0.45, max: 0.45, color: '225,72,63',
+    });
+  }
   if (S.stars <= 0) {
     S.stars = 0;
     S.over = true;
@@ -94,14 +113,15 @@ function update(dt) {
   if (!S.on || S.over) return;
   S.flash = Math.max(0, S.flash - dt);
 
-  const gap = Math.max(0.7, 1.65 - (S.level - 1) * 0.11);
+  const T = tuning(S.level);
   S.spawnAcc += dt;
-  if (S.spawnAcc >= gap) {
+  if (S.spawnAcc >= T.gap) {
     S.spawnAcc = 0;
-    if (S.words.length < 9) spawn();
+    if (S.words.length < T.maxWords) spawn();
   }
 
-  const base = 30 + (S.level - 1) * 7;
+  const base = T.speed;
+  S.shake = Math.max(0, S.shake - dt);
   for (let i = S.words.length - 1; i >= 0; i--) {
     const w = S.words[i];
     w.y += base * w.speed * dt;
@@ -113,6 +133,19 @@ function update(dt) {
   }
 
   if (S.popups.length > 8) S.popups.splice(0, S.popups.length - 8);
+
+  for (let i = S.sparks.length - 1; i >= 0; i--) {
+    const sp = S.sparks[i];
+    sp.life -= dt;
+    if (sp.life <= 0) { S.sparks.splice(i, 1); continue; }
+    sp.x += sp.vx * dt;
+    sp.y += sp.vy * dt;
+    sp.vy += 120 * dt;
+  }
+  const now = Date.now();
+  for (let i = S.flyStars.length - 1; i >= 0; i--) {
+    if (now - S.flyStars[i].at > S.flyStars[i].dur * 1000) S.flyStars.splice(i, 1);
+  }
 }
 
 /** 找出下一个待打的字为 ch 的词（同字时可切换目标；优先选最靠下的） */
@@ -147,6 +180,22 @@ function clearWord(w) {
   });
   Audio.play(S.combo >= 5 && S.combo % 5 === 0 ? 'combo' : 'win');
   Platform.vibrateLight();
+
+  // 消除特效：词条爆开 + 火花四散 + 星星飞向 HUD
+  S.pops = S.pops || [];
+  S.pops.push({ text: w.text, x: w.x + w.w / 2, y: w.y + 15, at: Date.now() });
+  if (S.pops.length > 6) S.pops.shift();
+  for (let i = 0; i < 12; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const sp = 60 + Math.random() * 140;
+    S.sparks.push({
+      x: w.x + w.w / 2, y: w.y + 15,
+      vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 40,
+      life: 0.5 + Math.random() * 0.25, max: 0.75,
+      color: i % 3 === 0 ? '255,107,53' : (i % 3 === 1 ? '255,176,80' : '22,163,116'),
+    });
+  }
+  S.flyStars.push({ x: w.x + w.w / 2, y: w.y + 8, at: Date.now(), dur: 0.55, to: S.stars });
 
   if (S.levelCleared >= LEVEL_STEP) {
     S.levelCleared = 0;
@@ -207,7 +256,9 @@ function revive() {
   S.combo = 0;
   S.words = S.words.filter((w) => w.y < S.topY + (S.lineY - S.topY) * 0.45);
   S.buf = '';
+  S.sparks = [];
+  S.flyStars = [];
   Platform.setKeyboardValue('');
 }
 
-module.exports = { S, start, update, input, revive, MAX_STARS, LANES, HUD_H, LINE_GAP, W, H, TOP, BOTTOM };
+module.exports = { S, start, update, input, revive, tuning, MAX_STARS, LANES, HUD_H, LINE_GAP, W, H, TOP, BOTTOM };

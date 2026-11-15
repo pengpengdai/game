@@ -165,7 +165,7 @@ async function main() {
 
   // 7. AI 失败 → 看广告复活
   Game.startAiGame('cn', 'normal');
-  assert(G.state === 'READY' && G.buttons.length === 1 && G.buttons[0].action === 'start_race', '中文模式直接开始（系统输入法）');
+  assert(G.state === 'READY' && G.buttons.some((b) => b.action === 'start_race'), '中文模式直接开始（系统输入法）');
   startRace();
   advance(3.2);
   assert(G.state === 'PLAY' && G.kb.visible === false, '中文模式用系统键盘，不显示自绘键盘');
@@ -510,6 +510,41 @@ async function main() {
     assert(G.state === 'DROP' && Drop.S.stars === 3 && Drop.S.revived === true, '复活后回到对局、3 颗星（stars=' + Drop.S.stars + '）');
     tapAction('drop_quit');
     assert(G.state === 'HOME', '掉落到主菜单（state=' + G.state + '）');
+  }
+
+  // 27. 返回首页入口：对局/就绪/结算/掉落都有「‹」
+  {
+    Game.startAiGame('cn', 'easy');
+    assert(G.buttons.some((b) => b.action === 'home' && b.ghost), '就绪页有返回按钮');
+    startRace();
+    advance(3.2);
+    assert(G.buttons.some((b) => b.action === 'home' && b.ghost), '对局页有返回按钮');
+    assert(G.buttons.some((b) => b.action === 'kb_show'), '对局页有「点此唤起键盘」');
+    tapAction('home');
+    assert(G.state === 'HOME', '对局中点返回 → 主菜单（state=' + G.state + '）');
+
+    Game.gotoHome();
+    tapAction('menu_drop');
+    assert(G.state === 'DROP' && G.buttons.some((b) => b.action === 'kb_show'), '掉落页有「点此唤起键盘」');
+    assert(G.buttons.some((b) => b.action === 'drop_quit' && b.ghost), '掉落页有返回按钮');
+    tapAction('kb_show');
+    assert(G.state === 'DROP', '点击唤起键盘不改变状态');
+    tapAction('drop_quit');
+    assert(G.state === 'HOME' && G.buttons.some((b) => b.action === 'menu_race'), '掉落返回 → 主菜单');
+  }
+
+  // 28. 第一关足够简单（掉落慢、生成稀疏、同屏少）
+  {
+    const T1 = Drop.tuning(1);
+    assert(T1.speed <= 20, '第 1 关下落速度很慢（' + T1.speed + ' px/s）');
+    assert(T1.gap >= 2.5, '第 1 关生成间隔够长（' + T1.gap.toFixed(2) + 's）');
+    assert(T1.maxWords <= 4, '第 1 关同屏词数受限（' + T1.maxWords + '）');
+    const T2 = Drop.tuning(2);
+    assert(T2.speed > T1.speed && T2.gap < T1.gap, '第 2 关开始加速');
+    Drop.start('cn');
+    const fall1 = Drop.S.words[0].y;
+    for (let i = 0; i < 20; i++) Drop.update(0.05);   // 1 秒
+    assert(Drop.S.words[0].y - fall1 < 26, '第 1 关 1 秒内下落不足 26px（实际 ' + Math.round(Drop.S.words[0].y - fall1) + 'px）');
   }
 
   console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');

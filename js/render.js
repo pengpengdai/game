@@ -223,10 +223,55 @@ function drawHome() {
   drawButtons();
 }
 
+function dropMascot(x, y, r) {
+  const blink = (Date.now() % 3800) < 160;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#FFB36B';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x, y + r * 0.16, r * 0.78, 0, Math.PI * 2);
+  ctx.fillStyle = '#FF8A4E';
+  ctx.fill();
+  // 眼睛
+  ctx.fillStyle = '#2A2621';
+  if (blink) {
+    ctx.fillRect(x - r * 0.36, y - r * 0.1, r * 0.24, r * 0.06);
+    ctx.fillRect(x + r * 0.12, y - r * 0.1, r * 0.24, r * 0.06);
+  } else {
+    ctx.beginPath();
+    ctx.arc(x - r * 0.24, y - r * 0.08, r * 0.11, 0, Math.PI * 2);
+    ctx.arc(x + r * 0.24, y - r * 0.08, r * 0.11, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // 笑
+  ctx.beginPath();
+  ctx.arc(x, y + r * 0.12, r * 0.26, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.strokeStyle = '#2A2621';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
 function drawDrop() {
   const D = Drop.S;
   const T = L.top || 0;
   bg();
+  const sh = D.shake > 0 ? Math.sin(Date.now() / 38) * 5 * D.shake : 0;
+  ctx.save();
+  ctx.translate(sh, 0);
+
+  // 背景装饰：云
+  const drift = Math.sin(Date.now() / 3000) * 8;
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath();
+  ctx.arc(58 + drift, T + 96, 16, 0, Math.PI * 2);
+  ctx.arc(76 + drift, T + 96, 11, 0, Math.PI * 2);
+  ctx.arc(42 + drift, T + 98, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(W - 66 - drift, T + 132, 13, 0, Math.PI * 2);
+  ctx.arc(W - 50 - drift, T + 132, 9, 0, Math.PI * 2);
+  ctx.fill();
 
   // 顶部 HUD
   cardEl(14, T + 8, W - 28, 52, 16);
@@ -298,12 +343,59 @@ function drawDrop() {
     ctx.fillRect(0, 0, W, H);
   }
 
+  // 消除爆炸：词条放大淡出
+  if (D.pops) {
+    for (let i = D.pops.length - 1; i >= 0; i--) {
+      const p = D.pops[i];
+      const age = (Date.now() - p.at) / 420;
+      if (age >= 1) { D.pops.splice(i, 1); continue; }
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 1 - age);
+      const sc = 1 + age * 0.55;
+      ctx.translate(p.x, p.y);
+      ctx.scale(sc, sc);
+      ctx.font = f(17, 800);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(p.text, 0, 0);
+      ctx.restore();
+    }
+  }
+
+  // 火花
+  for (let i = 0; i < D.sparks.length; i++) {
+    const sp = D.sparks[i];
+    ctx.globalAlpha = Math.max(0, sp.life / sp.max);
+    ctx.beginPath();
+    ctx.arc(sp.x, sp.y, 2.6, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgb(' + sp.color + ')';
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // 星星飞向顶部星条
+  for (let i = 0; i < D.flyStars.length; i++) {
+    const fs = D.flyStars[i];
+    const p = Math.min(1, (Date.now() - fs.at) / (fs.dur * 1000));
+    const e = 1 - Math.pow(1 - p, 3);
+    const sx0 = W - 22 - (MAX_STAR_SLOTS - 1) * 11;
+    const tx = sx0 + Math.max(0, Math.min(MAX_STAR_SLOTS - 1, fs.to)) * 11;
+    const ty = T + 34;
+    const x = fs.x + (tx - fs.x) * e;
+    const y = fs.y + (ty - fs.y) * e - Math.sin(e * Math.PI) * 26;
+    drawStar(x, y, 7, C.gold);
+  }
+
   // 底部输入提示（系统输入法）
   const bottomY = ly + 16;
-  cardEl(20, bottomY, W - 40, Math.max(46, H - (L.bottom || 0) - bottomY - 14), 16);
-  txt('用输入法打字 · 打对自动消除', W / 2, bottomY + 24, 12, C.ink, 'center', 700);
-  txt('打掉整词才消除 · 只打对前缀不算', W / 2, bottomY + 44, 10, C.muted, 'center', 400);
+  const cardH = Math.max(56, H - (L.bottom || 0) - bottomY - 14);
+  cardEl(20, bottomY, W - 40, cardH, 16);
+  dropMascot(58, bottomY + Math.min(30, cardH / 2), 15);
+  txt('用输入法打字 · 打对自动消除', W / 2 + 14, bottomY + 22, 12, C.ink, 'center', 700);
+  txt('打掉整词才消除 · 只打对前缀不算', W / 2 + 14, bottomY + 42, 10, C.muted, 'center', 400);
 
+  ctx.restore();
   drawButtons();
 }
 
@@ -421,6 +513,12 @@ function drawPills() {
 
 function drawButton(b) {
   if (!b || b.card) return;
+  if (b.ghost) {
+    fillRR(b.x, b.y + 1, b.w, b.h, 10, 'rgba(31,42,68,0.10)');
+    fillRR(b.x, b.y, b.w, b.h - 1, 10, 'rgba(255,255,255,0.86)');
+    txt(b.label, b.x + b.w / 2, b.y + b.h / 2 - 1, 19, C.navy, 'center', 700);
+    return;
+  }
   if (b.action === 'pause') {
     ctx.beginPath();
     ctx.arc(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, 0, Math.PI * 2);
