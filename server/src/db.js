@@ -9,6 +9,7 @@ class MemoryDB {
     this.records = [];           // game_records
     this.lb = new Map();         // 'mode:level' -> Map uid -> {score,cpm,ts}
     this.counters = new Map();   // 日限次计数
+    this.challenges = new Map(); // 挑战码 -> 记录（异步对战）
     this._uid = 1;
   }
 
@@ -33,6 +34,26 @@ class MemoryDB {
   }
 
   getUser(id) { return this.users.get(Number(id)) || null; }
+
+  /** 生成 6 位挑战码（去掉易混字符 0/O/1/I） */
+  async createChallenge(data) {
+    const AL = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    do {
+      code = '';
+      for (let i = 0; i < 6; i++) code += AL[Math.floor(Math.random() * AL.length)];
+    } while (this.challenges.has(code));
+    this.challenges.set(code, Object.assign({}, data, { code, created_at: Date.now() }));
+    if (this.challenges.size > 500) {
+      const oldest = this.challenges.keys().next().value;
+      this.challenges.delete(oldest);
+    }
+    return { code };
+  }
+
+  getChallenge(code) {
+    return this.challenges.get(String(code || '').toUpperCase()) || null;
+  }
 
   async addRecord(rec) {
     this.records.push(rec);

@@ -390,11 +390,77 @@ function drawLobby() {
 }
 
 // ========== 对局 ==========
+function drawBubble() {
+  if (!G.fx.bubble) return;
+  const age = (Date.now() - G.fx.bubble.at) / 1000;
+  if (age > 2.4) { G.fx.bubble = null; return; }
+  ctx.save();
+  ctx.globalAlpha = age < 1.8 ? 1 : Math.max(0, (2.4 - age) / 0.6);
+  const lp = L.play;
+  const text = G.fx.bubble.text;
+  ctx.font = f(11, 600);
+  const tw = ctx.measureText(text).width;
+  const w = tw + 22, h = 30;
+  const bx = lp.headX + lp.headW - w - 10, by = lp.headY + lp.headH + 4;
+  ctx.beginPath();
+  ctx.moveTo(bx + w - 24, by + 2);
+  ctx.lineTo(bx + w - 16, by - 7);
+  ctx.lineTo(bx + w - 10, by + 2);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(31,42,68,0.92)';
+  ctx.fill();
+  fillRR(bx, by, w, h, 12, 'rgba(31,42,68,0.92)');
+  txt(text, bx + w / 2, by + h / 2, 11, '#fff', 'center', 600);
+  ctx.restore();
+}
+
+function drawMilestone() {
+  if (!G.fx.milestone) return;
+  const age = (Date.now() - G.fx.milestone.at) / 1000;
+  if (age > 1.5) { G.fx.milestone = null; return; }
+  const lp = L.play;
+  ctx.save();
+  ctx.globalAlpha = age < 0.9 ? 1 : Math.max(0, (1.5 - age) / 0.6);
+  const y = lp.panelY + 10;
+  const w = 176, cx = W / 2;
+  fillRR(cx - w / 2, y, w, 34, 17, 'rgba(255,107,53,0.94)');
+  txt(G.fx.milestone.text, cx, y + 17, 12, '#fff', 'center', 700);
+  ctx.restore();
+}
+
+function drawFinisher() {
+  if (!G.fx.finisherAt) return;
+  const age = (Date.now() - G.fx.finisherAt) / 1000;
+  if (age > 0.9) { G.fx.finisherAt = 0; return; }
+  const lp = L.play;
+  const cx = W / 2, cy = lp.panelY + Math.min(70, lp.panelH / 2);
+  const p = age / 0.9;
+  ctx.save();
+  for (let i = 0; i < 3; i++) {
+    const rp = Math.min(1, p * 1.7 - i * 0.22);
+    if (rp <= 0) continue;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 28 + rp * 150, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,107,53,' + (0.55 * (1 - rp)).toFixed(3) + ')';
+    ctx.lineWidth = 7 * (1 - rp) + 1;
+    ctx.stroke();
+  }
+  const sc = 1 + Math.sin(Math.min(1, p * 1.5) * Math.PI) * 0.32;
+  ctx.translate(cx, cy);
+  ctx.scale(sc, sc);
+  txt('完成！', 0, 0, 30, '#fff', 'center', 800);
+  ctx.restore();
+}
+
 function drawBattle() {
   bg();
   drawScoreboard();
   drawStatChips();
   drawPassageCard();
+
+  drawBubble();
+  drawMilestone();
+  drawFinisher();
 
   if (G.kb.visible) drawKeyboard();
   else if (G.state === 'READY') drawKbPlaceholder();
@@ -420,7 +486,8 @@ function laneData() {
   }
   return [
     { me: true, name: '我', p: G.typedLen / n, color: C.navy, tag: G.playerFinished ? '已完成' : '' },
-    { me: false, name: 'AI 对手', p: G.aiFinished ? 1 : G.aiProgress, color: C.orange, tag: G.aiFinished ? '已完成' : '' },
+    { me: false, name: (G.aiRole && G.aiRole.name) || 'AI 对手', initial: (G.aiRole && G.aiRole.initial) || '对',
+      p: G.aiFinished ? 1 : G.aiProgress, color: C.orange, tag: G.aiFinished ? '已完成' : (G.challenge ? '好友记录' : '') },
   ];
 }
 
@@ -451,7 +518,7 @@ function drawScoreboard() {
     ctx.arc(S.avX, cy, 13, 0, Math.PI * 2);
     ctx.fillStyle = r.color;
     ctx.fill();
-    txt(r.me ? '我' : (r.name.slice(0, 1) || '对'), S.avX, cy, 10, '#fff', 'center', 800);
+    txt(r.me ? '我' : (r.initial || r.name.slice(0, 1) || '对'), S.avX, cy, 10, '#fff', 'center', 800);
     // 名字
     txt(r.name.length > 6 ? r.name.slice(0, 6) + '…' : r.name, S.nameX, lp.headY + 22, 12, C.ink, S.nameAlign, 700);
     // 进度百分比
@@ -696,8 +763,14 @@ function drawReadyDialog() {
   // 顶部装饰条
   fillRR(R.cardX, R.cardY, R.cardW, 5, 3, C.orange);
   txt('准备开始', W / 2, R.titleY, 21, C.ink, 'center', 800);
-  txt((G.mode === 'en' ? '英文' : '中文') + ' · ' + levelName(G.level) + ' · ' + (G.gameMode === 'pvp' ? '好友对战' : 'AI 竞速'),
-    W / 2, R.subY, 11, C.muted, 'center', 400);
+  const info = G.challenge
+    ? ('挑战 ' + G.challenge.nickname + ' · 目标 ' + G.challenge.score + ' 分')
+    : ((G.mode === 'en' ? '英文' : '中文') + ' · ' + levelName(G.level) + ' · ' +
+      (G.gameMode === 'pvp' ? '好友对战' : 'AI 竞速 · ' + ((G.aiRole && G.aiRole.name) || '对手')));
+  txt(info, W / 2, R.subY, 11, C.muted, 'center', 400);
+  if (G.gameMode === 'ai' && G.aiRole && G.aiRole.taunt && G.mode === 'cn') {
+    txt('「' + G.aiRole.taunt + '」', W / 2, R.subY + 20, 10, C.ink2, 'center', 400);
+  }
 
   if (G.mode === 'en') {
     txt('选择输入方式', W / 2, R.optY - 24, 12, C.ink2, 'center', 700);
@@ -779,6 +852,58 @@ function confetti(t) {
   }
 }
 
+function drawSpeedCurve() {
+  const lr = L.result;
+  const pts = G.curve || [];
+  if (pts.length < 2) return;
+  const x = 30, y = lr.curveY, w = W - 60, h = lr.curveH;
+  cardEl(x - 6, y - 16, w + 12, h + 26, 14);
+  txt('速度曲线', x, y - 5, 9, C.muted, 'left', 400);
+  txt(G.gameMode === 'pvp' ? '我 / 对手' : '我 / 对手', x + w, y - 5, 9, C.muted, 'right', 400);
+
+  const tMax = Math.max(1, pts[pts.length - 1].t);
+  const vMax = Math.max(1, G.passage.length);
+  const px = (t) => x + (t / tMax) * w;
+  const py = (v) => y + 6 + (1 - Math.min(1, v / vMax)) * (h - 8);
+
+  // 图例
+  fillRR(x + w - 66, y - 12, 6, 6, 3, 'rgba(31,42,68,0.95)');
+  fillRR(x + w - 34, y - 12, 6, 6, 3, 'rgba(255,107,53,0.9)');
+
+  ctx.strokeStyle = 'rgba(34,32,29,0.06)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    const yy = y + 6 + (h - 8) * i / 4;
+    ctx.beginPath(); ctx.moveTo(x, yy); ctx.lineTo(x + w, yy); ctx.stroke();
+  }
+
+  const line = (key, color, width) => {
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const X = px(pts[i].t), Y = py(pts[i][key] || 0);
+      if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y);
+    }
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.stroke();
+  };
+  line('ai', 'rgba(255,107,53,0.9)', 2);
+  line('me', 'rgba(31,42,68,0.95)', 2.6);
+}
+
+function drawModal() {
+  if (!G.modal) return;
+  ctx.fillStyle = 'rgba(20,16,12,0.46)';
+  ctx.fillRect(0, 0, W, H);
+  const cy = (L.top + H - L.bottom) / 2;
+  cardEl(30, cy - 150, W - 60, 300, 22);
+  txt(G.modal.title, W / 2, cy - 112, 20, C.ink, 'center', 800);
+  fillRR(50, cy - 84, W - 100, 74, 16, '#FFF3EC');
+  txt(G.modal.code, W / 2, cy - 47, 32, C.orangeDeep, 'center', 800);
+  txt(G.modal.tip, W / 2, cy + 12, 11, C.muted, 'center', 400);
+  drawButtons();
+}
+
 function drawResult() {
   const lr = L.result;
   bg();
@@ -818,8 +943,8 @@ function drawResult() {
   txt('段位', W / 2, lr.rankY + lr.rankR + 14, 10, C.muted, 'center', 400);
 
   // 数据卡 2×2
-  const cardY = lr.rankY + 58;
-  cardEl(22, cardY, W - 44, 126, 18);
+  const cardY = lr.cardY;
+  cardEl(22, cardY, W - 44, lr.cardH, 18);
   const cells = [
     ['用时', G.elapsed.toFixed(1) + ' 秒'],
     ['速度', G.cpm + ' 字/分'],
@@ -829,24 +954,30 @@ function drawResult() {
   const cw = (W - 44 - 24) / 2;
   for (let i = 0; i < cells.length; i++) {
     const cxx = 22 + 14 + (i % 2) * (cw + 10);
-    const cyy = cardY + 30 + Math.floor(i / 2) * 60;
+    const cyy = cardY + 28 + Math.floor(i / 2) * 50;
     txt(cells[i][0], cxx, cyy, 10, C.muted, 'left', 400);
     txt(cells[i][1], cxx, cyy + 20, 17, C.ink, 'left', 800);
   }
   ctx.strokeStyle = 'rgba(34,32,29,0.07)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(30, cardY + 63);
+  ctx.moveTo(30, cardY + 60);
   ctx.lineTo(W - 30, cardY + 63);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(W / 2, cardY + 14);
-  ctx.lineTo(W / 2, cardY + 112);
+  ctx.moveTo(W / 2, cardY + 12);
+  ctx.lineTo(W / 2, cardY + 100);
   ctx.stroke();
+
+  drawSpeedCurve();
 
   txt(String(G.score), W / 2, lr.scoreY, 30, C.gold, 'center', 800);
   txt('得分', W / 2, lr.scoreY - 22, 10, C.muted, 'center', 400);
-  if (G.gameMode === 'ai' && !win) txt('看广告复活：AI 退回 60% 继续本局', W / 2, lr.scoreY + 18, 10, C.muted, 'center', 400);
+  if (G.challenge) {
+    const gapScore = G.challenge.score - G.score;
+    txt(win ? '你赢了 ' + G.challenge.nickname + '！' : ('还差 ' + gapScore + ' 分追上 ' + G.challenge.nickname),
+      W / 2, lr.scoreY + 18, 10, win ? C.green : C.red, 'center', 600);
+  } else if (G.gameMode === 'ai' && !win) txt('看广告复活：AI 退回 60% 继续本局', W / 2, lr.scoreY + 18, 10, C.muted, 'center', 400);
   if (G.pvp.waitingRematch) txt('等待对手同意再战…', W / 2, lr.scoreY + 18, 10, C.muted, 'center', 400);
 
   drawButtons();
@@ -886,6 +1017,7 @@ function render() {
   else if (G.state === 'PLAY') { drawBattle(); drawButtons(); }
   else if (G.state === 'PAUSED') { drawBattle(); drawPaused(); }
   else if (G.state === 'RESULT') drawResult();
+  if (G.modal) drawModal();
 }
 
 module.exports = { render };

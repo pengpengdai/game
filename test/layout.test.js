@@ -127,16 +127,20 @@ Game.bootstrap();
   const r = L.result;
   const banner = R(22, r.bannerY - 40, W - 44, 110);
   const rank = R(W / 2 - r.rankR, r.rankY - r.rankR, r.rankR * 2, r.rankR * 2);
-  const statCard = R(22, r.rankY + 58, W - 44, 126);
-  const btns = R((W - (r.btnW * 3 + 12)) / 2, r.btnY, r.btnW * 3 + 12, r.btnH);
-  [banner, rank, statCard, btns].forEach((x, i) => assert(inside(x), '结算元素 ' + i + ' 在屏幕内'));
+  const statCard = R(22, r.cardY, W - 44, r.cardH);
+  const curve = R(24, r.curveY - 16, W - 48, r.curveH + 26);
+  const btnW2 = (W - 56) / 2;
+  const btnRow1 = R(22, r.btnY, btnW2 * 2 + 12, 46);
+  const btnRow2 = R(22, r.btnY + 58, btnW2 * 2 + 12, 46);
+  [banner, rank, statCard, curve, btnRow1, btnRow2].forEach((x, i) => assert(inside(x), '结算元素 ' + i + ' 在屏幕内'));
   pair(banner, rank, '胜利卡 vs 段位');
   pair(rank, statCard, '段位 vs 数据卡');
-  assert(statCard.y + statCard.h <= r.scoreY - 6, '数据卡与得分不重叠');
-  assert(r.scoreY + 10 <= r.btnY, '得分与按钮不重叠');
+  pair(statCard, curve, '数据卡 vs 速度曲线');
+  assert(curve.y + curve.h <= r.scoreY - 18, '速度曲线与得分不重叠');
+  assert(r.btnY + 58 + 46 <= H - L.bottom - 4, '两行按钮在安全区内');
   // 数据行在卡片内
-  const lastRowY = r.statY + 3 * 26;
-  assert(lastRowY < statCard.y + statCard.h - 8, '四行数据都在卡片内');
+  const lastRowY = r.cardY + 78 + 22;
+  assert(lastRowY < statCard.y + statCard.h - 4, '四行数据都在卡片内');
 }
 
 // ---- 大厅 ----

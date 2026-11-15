@@ -77,6 +77,39 @@ function createRoutes({ db, hub }) {
       return json(res, 200, hub.rooms.sanitize(hub.rooms.get(roomId)) || { code: 'ROOM_NOT_FOUND' });
     }
 
+    // ---- 挑战码（异步对战）----
+    if (path === '/api/challenges' && method === 'POST') {
+      const body = await readBody(req).catch(() => ({}));
+      const passage = String(body.passage || '').slice(0, 300);
+      if (!passage || passage.length < 5) return json(res, 400, { code: 'BAD_PASSAGE' });
+      const timeMs = Math.max(1000, Math.min(600000, Math.floor(Number(body.timeMs) || 30000)));
+      const data = {
+        mode: body.mode === 'en' ? 'en' : 'cn',
+        level: ['easy', 'normal', 'hard'].includes(body.level) ? body.level : 'easy',
+        passage,
+        timeMs,
+        score: Math.max(0, Math.floor(Number(body.score) || 0)),
+        cpm: Math.max(0, Math.floor(Number(body.cpm) || 0)),
+        accuracy: Math.max(0, Math.min(100, Math.floor(Number(body.accuracy) || 0))),
+        maxCombo: Math.max(0, Math.floor(Number(body.maxCombo) || 0)),
+        nickname: String(body.nickname || '好友').slice(0, 12),
+        user_id: uid,
+      };
+      const ret = await db.createChallenge(data);
+      return json(res, 200, { code: ret.code });
+    }
+
+    if (/^\/api\/challenges\/[A-Za-z0-9]+$/.test(path) && method === 'GET') {
+      const code = path.split('/')[3];
+      const ch = db.getChallenge(code);
+      if (!ch) return json(res, 404, { code: 'CHALLENGE_NOT_FOUND' });
+      return json(res, 200, {
+        code: ch.code, mode: ch.mode, level: ch.level, passage: ch.passage,
+        timeMs: ch.timeMs, score: ch.score, cpm: ch.cpm,
+        accuracy: ch.accuracy, maxCombo: ch.maxCombo, nickname: ch.nickname,
+      });
+    }
+
     if (path === '/api/revive/confirm' && method === 'POST') {
       const body = await readBody(req).catch(() => ({}));
       const scene = ['revive', 'slow_down', 'rematch'].includes(body.scene) ? body.scene : 'revive';

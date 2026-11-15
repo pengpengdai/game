@@ -21,6 +21,15 @@ const BOTTOM_INSET = SAFE.bottom ? Math.max(0, H - SAFE.bottom) : 0;
 const USABLE_H = H - TOP_INSET - BOTTOM_INSET;
 
 const AI_TIME = { easy: 25, normal: 32, hard: 42 };
+
+// AI 人格：名字/头像字/台词（按难度对应，让输赢更有对象感）
+const AI_ROLES = [
+  { name: '键盘侠小王', initial: '王', color: '#FF6B35', taunt: '上次这局我 25 秒跑完，你能跟上吗？', lead: '我先走一步~', behind: '哟，手速可以啊' },
+  { name: '摸鱼老张', initial: '张', color: '#1F2A44', taunt: '上班摸鱼中，陪你打一局', lead: '别急，我摸鱼呢', behind: '今天状态不错嘛' },
+  { name: '竞赛选手阿May', initial: 'M', color: '#16A374', taunt: '全国赛第 8，别怕', lead: '节奏稳一点', behind: '可以啊，继续保持' },
+];
+const ROLE_BY_LEVEL = { easy: 0, normal: 1, hard: 2 };
+const MILESTONES = [25, 50, 75];
 const BEST_KEY = 'tp_best';
 const REVIVE_DAY_LIMIT = 5;
 const PVP_REPORT_GAP = 120;   // 进度上报间隔 ms
@@ -79,8 +88,10 @@ const LAYOUT = {
     hintY: TOP_INSET + 388,
   },
   result: {
-    bannerY: TOP_INSET + 110, rankY: TOP_INSET + 224, rankR: 44,
-    statY: TOP_INSET + 300, scoreY: TOP_INSET + 434, btnY: TOP_INSET + 470, btnW: 96, btnH: 48,
+    bannerY: TOP_INSET + 96, rankY: TOP_INSET + 206, rankR: 36,
+    cardY: TOP_INSET + 250, cardH: 112,
+    curveY: TOP_INSET + 380, curveH: 44,
+    scoreY: TOP_INSET + 476, btnY: TOP_INSET + 506, btnW: 96, btnH: 48,
   },
 };
 
@@ -98,6 +109,12 @@ const G = {
   },
   reviveUsed: false, slowUsed: false, aiPauseUntil: 0,
   slowBtn: null,
+  aiRole: AI_ROLES[0],                 // 当前 AI 人格
+  challenge: null,                     // 挑战码对局信息（幽灵对手）
+  curve: [], curveAt: 0,               // 速度曲线采样
+  milestoneDone: {},                   // 已播报的里程碑
+  modal: null,                         // 通用弹窗（挑战码展示）
+  codeMode: false,                     // 正在输入挑战码
   countdown: 0,
   lastInput: '',                       // 系统输入法上次的整段文本（中文增量用）
   inputBase: 0,                        // 输入框里已消费掉的字符数（调试用）
@@ -128,6 +145,94 @@ function rankFor(mode, cpm) {
 function setButtons(list) { G.buttons = list; }
 
 // ========== 界面按钮 ==========
+function checkMilestone() {
+  if (!G.passage.length) return;
+  const pct = Math.round(G.typedLen / G.passage.length * 100);
+  for (let i = 0; i < MILESTONES.length; i++) {
+    const m = MILESTONES[i];
+    if (pct >= m && !G.milestoneDone[m]) {
+      G.milestoneDone[m] = true;
+      G.fx.milestone = { text: m + '% · ' + (m === 25 ? '开局不错' : (m === 50 ? '已过半！' : '最后冲刺！')), at: Date.now() };
+      Audio.play('milestone');
+    }
+  }
+}
+
+/** 玩家打完全文：结算前的最后一击 + 挑战码胜负判定 */
+function onPlayerComplete() {
+  G.playerFinished = true;
+  G.result = G.challenge ? (G.score >= G.challenge.score ? 'win' : 'lose') : 'win';
+  G.fx.finisherAt = Date.now();
+  if (G.gameMode === 'ai') {
+    G.overDelay = 1.2;
+    Audio.play(G.result === 'win' ? 'win' : 'lose');
+    Platform.hideKeyboard();
+  } else {
+    Net.send({ type: 'finish', stats: buildStats() });
+    G.waitResultUntil = Date.now() + 6000;
+  }
+}
+
+/** 挑战码：建立「幽灵对战」，对手按好友通关用时推进 */
+function startChallenge(c) {
+  G.gameMode = 'ai';
+  G.mode = c.mode === 'en' ? 'en' : 'cn';
+  G.level = c.level || 'easy';
+  resetRound();
+  G.passage = c.passage;
+  const t = Math.max(5, Number(c.timeMs || 30000) / 1000);
+  G.aiSpeed = 1 / t;
+  const nick = c.nickname || '好友';
+  G.aiRole = { name: nick, initial: String(nick).slice(0, 1), color: '#1F2A44', taunt: '接招吧，这是我的记录', lead: '别掉队哦', behind: '你比我还快？' };
+  G.challenge = { code: c.code || '', nickname: nick, score: Number(c.score || 0), cpm: Number(c.cpm || 0), timeMs: t * 1000 };
+  G.state = 'READY';
+  G.slowBtn = null;
+  G.kb.visible = false;
+  buildKeyboard();
+  buildReadyButtons();
+  Audio.play('click');
+}
+
+/** 结束页：把自己的这一局生成挑战码 */
+function makeChallenge() {
+  Platform.showToast('生成挑战码…');
+  Net.createChallenge({
+    mode: G.mode, level: G.level, passage: G.passage,
+    timeMs: Math.max(1000, Math.round(G.elapsed * 1000)), score: G.score, cpm: G.cpm,
+    accuracy: G.accuracy, maxCombo: G.maxCombo, nickname: '我',
+  }).then((res) => {
+    if (!res || !res.code) { Platform.showToast('生成失败，检查网络'); return; }
+    G.modal = { title: '挑战码已生成', code: res.code, tip: '发给好友，他输入这串码就能挑战你这局' };
+    const bw = (W - 92) / 2;
+    const by = (TOP_INSET + H - BOTTOM_INSET) / 2 + 62;
+    setButtons([
+      { x: 40, y: by, w: bw, h: 46, label: '复制挑战码', action: 'code_copy', primary: true },
+      { x: 40 + bw + 12, y: by, w: bw, h: 46, label: '关闭', action: 'code_close' },
+    ]);
+  }).catch(() => Platform.showToast('生成失败，检查网络'));
+}
+
+/** 首页：输入挑战码 */
+function openChallengeInput() {
+  G.codeMode = true;
+  G.modal = null;
+  Platform.showKeyboard({ maxLength: 6, multiple: false, confirmHold: false, confirmType: 'done', defaultValue: '' });
+  Platform.showToast('输入 6 位挑战码');
+}
+
+/** 提交挑战码：拉取好友记录并开局 */
+function submitChallengeCode(value) {
+  const code = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  G.codeMode = false;
+  Platform.hideKeyboard();
+  if (code.length < 6) { Platform.showToast('挑战码需要 6 位'); return; }
+  Platform.showToast('加载挑战中…');
+  Net.fetchChallenge(code).then((c) => {
+    if (!c || !c.passage) { Platform.showToast('挑战码不存在或已过期'); return; }
+    startChallenge(c);
+  }).catch(() => Platform.showToast('网络异常，稍后再试'));
+}
+
 function buildHomeButtons() {
   const L = LAYOUT.home;
   const M = L.lbModal;
@@ -146,8 +251,9 @@ function buildHomeButtons() {
     { x: lx0 + (L.levelBtnW + L.levelGap) * 2, y: L.levelBtnY, w: L.levelBtnW, h: L.levelBtnH, label: '困难', action: 'level:hard', active: G.level === 'hard' },
     { x: cx - L.startW / 2, y: L.startY, w: L.startW, h: L.startH, label: '开始比赛', action: 'start', primary: true },
     { x: cx - L.pvpW / 2, y: L.pvpY, w: L.pvpW, h: L.pvpH, label: '好友对战', action: 'pvp', secondary: true },
-    { x: cx - L.lbBtnW - 6, y: L.lbBtnY, w: L.lbBtnW, h: L.lbBtnH, label: '好友榜', action: 'lb_friend', active: G.lb.showFriend },
-    { x: cx + 6, y: L.lbBtnY, w: L.lbBtnW, h: L.lbBtnH, label: '全局榜', action: 'lb_global', active: G.lb.showGlobal },
+    { x: cx - L.lbBtnW - 52, y: L.lbBtnY, w: 96, h: L.lbBtnH, label: '好友榜', action: 'lb_friend', active: G.lb.showFriend },
+    { x: cx - 48, y: L.lbBtnY, w: 96, h: L.lbBtnH, label: '全局榜', action: 'lb_global', active: G.lb.showGlobal },
+    { x: cx + 56, y: L.lbBtnY, w: 96, h: L.lbBtnH, label: '挑战码', action: 'challenge_entry' },
     { x: L.soundX, y: L.soundY, w: L.soundW, h: L.soundH, label: G.soundOn ? '♪ 开' : '♪ 关', action: 'sound', small: true },
   ]);
 }
@@ -176,8 +282,13 @@ function buildResultButtons() {
   });
   const win = G.result === 'win';
   if (G.gameMode === 'ai') {
-    if (!win) setButtons([mk(0, '看广告复活', 'revive', true), mk(1, '再来一局', 'again'), mk(2, '返回首页', 'home')]);
-    else setButtons([mk(0, '再来一局', 'again', true), mk(1, '分享战绩', 'share'), mk(2, '返回首页', 'home')]);
+    const gap = 12;
+    const bw = (W - 44 - gap) / 2;
+    const mk2 = (col, row, label, action, primary) => ({
+      x: 22 + col * (bw + gap), y: L.btnY + row * 58, w: bw, h: 46, label, action, primary: !!primary,
+    });
+    if (!win) setButtons([mk2(0, 0, '看广告复活', 'revive', true), mk2(1, 0, '挑战好友', 'make_challenge'), mk2(0, 1, '再来一局', 'again'), mk2(1, 1, '返回首页', 'home')]);
+    else setButtons([mk2(0, 0, '再来一局', 'again', true), mk2(1, 0, '挑战好友', 'make_challenge'), mk2(0, 1, '分享战绩', 'share'), mk2(1, 1, '返回首页', 'home')]);
   } else {
     if (G.pvp.waitingRematch) {
       setButtons([{ x: W / 2 - L.btnW / 2, y: L.btnY, w: L.btnW, h: L.btnH, label: '返回首页', action: 'home' }]);
@@ -231,6 +342,8 @@ function startAiGame(mode, level) {
   G.mode = mode; G.level = level;
   resetRound();
   G.passage = Words.pick(mode, level);
+  G.challenge = null;
+  G.aiRole = AI_ROLES[ROLE_BY_LEVEL[level] || 0];
   // 进度比例/秒：整篇文章在 AI_TIME[level] 秒内走完（1 = 终点）
   G.aiSpeed = 1 / AI_TIME[level];
   G.countdown = 0;
@@ -252,6 +365,8 @@ function resetRound() {
   G.reviveUsed = false; G.slowUsed = false; G.aiPauseUntil = 0;
   G.pvp.peerTypedLen = 0; G.pvp.peerScore = 0; G.pvp.peerCombo = 0;
   G.pvp.peerFinished = false; G.pvp.peerLeft = false;
+  G.curve = []; G.curveAt = 0; G.curveAcc = 0; G.milestoneDone = {};
+  G.fx.milestone = null; G.fx.bubble = null; G.fx.finisherAt = 0; G.fx.tauntDone = false;
   G.startedAt = Date.now();
 }
 
@@ -598,8 +713,9 @@ function inputCn(value) {
     G.combo += adv;
     G.maxCombo = Math.max(G.maxCombo, G.combo);
     G.score += adv * (10 + Math.min(G.combo, 50));
-    Audio.play('tick');
+    Audio.playKey(G.combo);
     G.fx.lastCharAt = Date.now();
+    checkMilestone();
     if (G.combo >= 5 && G.combo % 5 === 0) {
       Audio.play('combo');
       G.fx.comboAt = Date.now();
@@ -609,19 +725,7 @@ function inputCn(value) {
     if (!G.kb.visible) G.buttons = buildPlayButtons();
     if (G.gameMode === 'pvp') reportProgress();
 
-    if (G.matchedCn >= pm.length) {
-      if (G.gameMode === 'ai') {
-        G.playerFinished = true;
-        G.result = 'win';
-        G.overDelay = 1.2;
-        Audio.play('win');
-        Platform.hideKeyboard();
-      } else {
-        G.playerFinished = true;
-        Net.send({ type: 'finish', stats: buildStats() });
-        G.waitResultUntil = Date.now() + 6000; // 兜底：等结果超时判胜
-      }
-    }
+    if (G.matchedCn >= pm.length) onPlayerComplete();
     return;
   }
 
@@ -678,8 +782,9 @@ function input(value) {
     G.combo += adv;
     G.maxCombo = Math.max(G.maxCombo, G.combo);
     G.score += adv * (10 + Math.min(G.combo, 50));
-    Audio.play('tick');
+    Audio.playKey(G.combo);
     G.fx.lastCharAt = Date.now();
+    checkMilestone();
     if (G.combo >= 5 && G.combo % 5 === 0) {
       Audio.play('combo');
       G.fx.comboAt = Date.now();
@@ -688,19 +793,7 @@ function input(value) {
     Platform.setKeyboardValue('');
     if (G.gameMode === 'pvp') reportProgress();
 
-    if (G.typedLen >= pass.length) {
-      if (G.gameMode === 'ai') {
-        G.playerFinished = true;
-        G.result = 'win';
-        G.overDelay = 1.2;
-        Audio.play('win');
-        Platform.hideKeyboard();
-      } else {
-        G.playerFinished = true;
-        Net.send({ type: 'finish', stats: buildStats() });
-        G.waitResultUntil = Date.now() + 6000; // 兜底：等结果超时判胜
-      }
-    }
+    if (G.typedLen >= pass.length) onPlayerComplete();
   }
 }
 
@@ -805,6 +898,19 @@ function update(dt) {
   if (G.state === 'PLAY') {
     G.elapsed = (Date.now() - G.startedAt - (G.pause.total || 0)) / 1000;
 
+    // 速度曲线采样（每 0.8s 帧时间一个点，结算页画两条折线）
+    G.curveAcc = (G.curveAcc || 0) + dt;
+    if (G.curveAcc >= 0.8) {
+      G.curveAcc -= 0.8;
+      const total = G.passage.length || 1;
+      G.curve.push({
+        t: Math.round(G.elapsed * 10) / 10,
+        me: G.typedLen,
+        ai: G.gameMode === 'pvp' ? (G.pvp.peerTypedLen || 0) : Math.round(G.aiProgress * total),
+      });
+      if (G.curve.length > 160) G.curve.shift();
+    }
+
     if (G.gameMode === 'ai') {
       if (!G.gameOver && !G.playerFinished) {
         const paused = G.slowUsed && Date.now() < G.aiPauseUntil;
@@ -817,6 +923,12 @@ function update(dt) {
             Audio.play('lose');
             Platform.hideKeyboard();
           }
+        }
+        // AI 垃圾话：过半时冒一次气泡（领先就嘲讽、落后就夸）
+        if (G.aiRole && !G.fx.tauntDone && G.aiProgress >= 0.5) {
+          G.fx.tauntDone = true;
+          const lead = G.aiProgress * (G.passage.length || 1) > G.typedLen;
+          G.fx.bubble = { text: lead ? G.aiRole.lead : G.aiRole.behind, at: Date.now() };
         }
         // 对手接近终点 → 出现减速广告按钮
         if (!G.slowUsed && G.aiProgress >= 0.8 && !G.slowBtn && !G.gameOver && !G.playerFinished) {
@@ -935,6 +1047,10 @@ function tap(x, y) {
     else if (a === 'lb_global') openGlobalLb();
     else if (a === 'sound') toggleSound();
     else if (a === 'lb_close') { G.lb.showFriend = false; G.lb.showGlobal = false; buildHomeButtons(); }
+    else if (a === 'challenge_entry') openChallengeInput();
+    else if (a === 'make_challenge') makeChallenge();
+    else if (a === 'code_copy') { Platform.setClipboardData(G.modal && G.modal.code); Platform.showToast('挑战码已复制'); }
+    else if (a === 'code_close') { G.modal = null; buildResultButtons(); }
     else if (a === 'kb:q9' || a === 'kb:q26') {
       G.kb.layout = a === 'kb:q9' ? 'q9' : 'q26';
       Platform.setStorageSync(KB_KEY, G.kb.layout);
@@ -992,4 +1108,5 @@ module.exports = {
   G, bootstrap, gotoHome, startAiGame, startPvpLobby, pvpJoin, pvpReady, pvpLeave,
   update, tap, input, confirmClear, onNet, firstTouch, handleLaunchOptions, startPlay, buildKeyboard,
   buildLobbyButtons, pauseGame, resumeGame,
+  startChallenge, submitChallengeCode, makeChallenge, openChallengeInput,
 };

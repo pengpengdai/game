@@ -4,6 +4,7 @@ const storage = {};
 let lastShare = null, cloudKv = null;
 let adCloseCb = null;
 let kbSets = 0;   // 中文模式下 setKeyboardValue 调用次数（应为 0）
+let lastClip = null;   // 剪贴板内容
 let socketHandlers = {};
 
 const fakeSocket = {
@@ -28,6 +29,7 @@ global.tt = {
   getStorageSync: (k) => (storage[k] !== undefined ? storage[k] : ''),
   setStorageSync: (k, v) => { storage[k] = v; },
   vibrateShort: () => {},
+  setClipboardData: (o) => { lastClip = o && o.data; },
   shareAppMessage: (o) => { lastShare = o; },
   login: ({ success }) => success({ code: 'mock-code' }),
   getLaunchOptionsSync: () => ({}),
@@ -39,6 +41,11 @@ global.tt = {
     if (u.indexOf('/api/login') === 0) respond({ token: 'tok-1', user: { id: 1, nickname: 'T' } });
     else if (u.indexOf('/api/rooms') === 0 && opt.method === 'POST') respond({ roomId: 'R1' });
     else if (u.indexOf('/api/records') === 0) respond({ ok: true });
+    else if (u.indexOf('/api/challenges') === 0 && opt.method === 'POST') respond({ code: 'ABC123' });
+    else if (u.indexOf('/api/challenges/') === 0) respond({
+      code: 'ABC123', mode: 'cn', level: 'easy', passage: '书中自有黄金屋',
+      timeMs: 20000, score: 900, cpm: 120, accuracy: 98, maxCombo: 7, nickname: '小明',
+    });
     else if (u.indexOf('/api/revive/confirm') === 0) failReq();
     else if (u.indexOf('/api/leaderboard') === 0) respond({ list: [], mine: null });
     else failReq();
@@ -354,6 +361,61 @@ async function main() {
     assert(G.typedLen === 4, '打到「有」后进度正确（typedLen=' + G.typedLen + '）');
     Game.input('黄金屋');
     assert(G.playerFinished && G.typedLen === 7, '输入框被清空后继续打也能完成（typedLen=' + G.typedLen + '）');
+  }
+
+  // 19. AI 人格 + 里程碑 + 最后一击 + 速度曲线
+  {
+    Game.startAiGame('cn', 'hard');
+    assert(G.aiRole && G.aiRole.name === '竞赛选手阿May', '困难档 AI 人格正确（' + (G.aiRole && G.aiRole.name) + '）');
+    Game.startAiGame('cn', 'easy');
+    assert(G.aiRole.name === '键盘侠小王', '简单档 AI 人格正确（' + G.aiRole.name + '）');
+
+    startRace();
+    advance(3.2);
+    G.passage = '书中自有黄金屋';
+    Game.input('书中');
+    assert(G.fx.milestone && G.fx.milestone.text.indexOf('25%') === 0, '25% 里程碑触发（' + (G.fx.milestone && G.fx.milestone.text) + '）');
+    Game.input('书中自');
+    Game.input('书中自有');
+    assert(G.milestoneDone[50] === true, '50% 里程碑只播一次');
+    advance(0.85);
+    assert(G.curve.length >= 1 && G.curve[G.curve.length - 1].me === 4, '速度曲线已采样（点=' + G.curve.length + '）');
+    Game.input('书中自有黄金屋');
+    assert(G.fx.finisherAt > 0, '最后一击触发（finisherAt=' + G.fx.finisherAt + '）');
+  }
+
+  // 20. 挑战码：结束页生成 → 复制 → 输入码开局 → 按分数判胜负
+  {
+    Game.startAiGame('cn', 'easy');
+    startRace();
+    advance(3.2);
+    G.passage = '书中自有黄金屋';
+    Game.input('书中自有黄金屋');
+    advance(2);
+    assert(G.state === 'RESULT', '打完进入结算（state=' + G.state + '）');
+    tapAction('make_challenge');
+    await new Promise((r) => setTimeout(r, 0));
+    console.log('   … 挑战码：', G.modal && G.modal.code);
+    assert(!!(G.modal && G.modal.code === 'ABC123'), '生成挑战码（' + (G.modal && G.modal.code) + '）');
+    assert(G.buttons.some((b) => b.action === 'code_copy'), '弹窗有复制按钮');
+    tapAction('code_copy');
+    assert(lastClip === 'ABC123', '挑战码已复制到剪贴板');
+    tapAction('code_close');
+    assert(G.modal === null && G.state === 'RESULT', '关闭弹窗回到结算');
+
+    Game.gotoHome();
+    Game.openChallengeInput();
+    assert(G.codeMode === true, '进入挑战码输入态');
+    Game.submitChallengeCode('abc123');
+    await new Promise((r) => setTimeout(r, 0));
+    assert(G.state === 'READY' && G.challenge && G.challenge.score === 900, '拉取挑战并进入就绪（state=' + G.state + ', 目标=' + (G.challenge && G.challenge.score) + '）');
+    assert(Math.abs(G.aiSpeed - 1 / 20) < 0.01, '幽灵对手按好友用时推进（speed=' + G.aiSpeed.toFixed(3) + '）');
+    assert(G.passage === '书中自有黄金屋', '使用挑战码里的文章');
+
+    startRace();
+    advance(3.2);
+    Game.input('书中自有黄金屋');
+    assert(G.playerFinished && G.result === 'lose', '分数低于好友记录 → 判负（result=' + G.result + '）');
   }
 
   console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');

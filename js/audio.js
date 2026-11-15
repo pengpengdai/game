@@ -6,7 +6,8 @@
 const Platform = require('./platform');
 
 const MUTE_KEY = 'tp_audio_muted';
-const NAMES = ['tick', 'error', 'win', 'lose', 'click', 'combo'];
+// key1~3 为机械键盘按键音（三个力度变体，打字时随机播放，避免机械重复）
+const NAMES = ['tick', 'error', 'win', 'lose', 'click', 'combo', 'key1', 'key2', 'key3', 'milestone'];
 
 let inited = false;
 let muted = false;
@@ -40,6 +41,15 @@ function startBgm() {
 }
 function stopBgm() { try { if (bgm.ctx) bgm.ctx.stop(); } catch (e) {} }
 
+/** 按键音：三档力度随机，随连击升高音色更脆 */
+function playKey(combo) {
+  const c = Number(combo) || 0;
+  let name;
+  if (c >= 30) name = 'key3';
+  else if (c >= 10) name = 'key2';
+  else name = Math.random() < 0.5 ? 'key1' : 'key2';
+  play(name);
+}
 function isMuted() { return muted; }
 function toggleMute() {
   muted = !muted;
@@ -47,4 +57,4 @@ function toggleMute() {
   if (muted) stopBgm(); else startBgm();
 }
 
-module.exports = { init, play, startBgm, stopBgm, toggleMute, isMuted };
+module.exports = { init, play, playKey, startBgm, stopBgm, toggleMute, isMuted };

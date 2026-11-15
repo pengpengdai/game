@@ -97,6 +97,9 @@ const Platform = {
   },
 
   // ---- 提示 ----
+  setClipboardData(text) {
+    safe(() => { if (api && api.setClipboardData) api.setClipboardData({ data: String(text || '') }); });
+  },
   showToast(title) {
     safe(() => { if (api && api.showToast) api.showToast({ title: title || '', icon: 'none' }); });
   },

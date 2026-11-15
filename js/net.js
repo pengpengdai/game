@@ -125,8 +125,18 @@ async function fetchLeaderboard(mode, level) {
   catch (e) { return null; }
 }
 
+/** 创建挑战码（异步对战） */
+function createChallenge(payload) {
+  return http('/api/challenges', payload, 'POST');
+}
+/** 拉取挑战码对应的记录 */
+function fetchChallenge(code) {
+  return http('/api/challenges/' + encodeURIComponent(code), null, 'GET');
+}
+
 module.exports = {
   on, emit, http, ensureLogin, connect, send,
   postRecord, reviveConfirm, createRoom, fetchLeaderboard,
   getToken, setToken, setBase: (u) => { Config.SERVER_BASE = u; },
+  createChallenge, fetchChallenge,
 };

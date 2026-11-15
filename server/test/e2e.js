@@ -117,6 +117,17 @@ async function main() {
   await cB.next('game_start');
   assert(!!gsA2.passage && gsA2.seed !== gsA.seed, '再战重开新局（新 seed 新文章）');
 
+  // 7.5 挑战码：生成 → 拉取 → 不存在的码
+  const chRes = await api(base, '/api/challenges', {
+    method: 'POST', headers: hA,
+    body: JSON.stringify({ mode: 'cn', level: 'easy', passage: '书中自有黄金屋', timeMs: 20000, score: 900, cpm: 120, accuracy: 98, maxCombo: 7, nickname: 'A' }),
+  });
+  assert(chRes.status === 200 && /^[A-Z0-9]{6}$/.test(chRes.body.code || ''), '挑战码生成（' + chRes.body.code + '）');
+  const got = await api(base, '/api/challenges/' + chRes.body.code, { headers: hA });
+  assert(got.status === 200 && got.body.passage === '书中自有黄金屋' && got.body.score === 900 && got.body.timeMs === 20000, '挑战码可拉取且内容一致');
+  const bad = await api(base, '/api/challenges/ZZZZZZ', { headers: hA });
+  assert(bad.status === 404, '不存在的挑战码返回 404');
+
   // 8. 断线：B 关闭 → 房间清理不崩溃
   cB.ws.close();
   await new Promise((r) => setTimeout(r, 200));

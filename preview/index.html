@@ -145,11 +145,25 @@ function runScene() {
       G.state = 'RESULT'; G.result = 'win'; G.rank = 'B'; G.score = 1876;
       G.elapsed = 28.4; G.cpm = 186; G.accuracy = 98; G.maxCombo = 31;
       G.gameMode = 'ai';
+      G.aiRole = { name: '键盘侠小王', initial: '王', color: '#FF6B35', taunt: '', lead: '', behind: '' };
+      G.passage = '千里之行始于足下书中自有黄金屋';
+      G.curve = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => ({
+        t: i * 3.5, me: Math.round(12 * i), ai: Math.round(9.5 * i),
+      }));
       G.buttons = [
         { x: 28, y: 486, w: 96, h: 48, label: '再来一局', action: 'again', primary: true },
         { x: 132, y: 486, w: 96, h: 48, label: '分享战绩', action: 'share' },
         { x: 236, y: 486, w: 96, h: 48, label: '返回首页', action: 'home' },
       ];
+      break;
+    case 'challenge':
+      G.state = 'RESULT'; G.result = 'win'; G.rank = 'A'; G.score = 1620;
+      G.elapsed = 26.2; G.cpm = 168; G.accuracy = 97; G.maxCombo = 28;
+      G.gameMode = 'ai';
+      G.passage = '书中自有黄金屋';
+      G.curve = [0, 1, 2, 3, 4, 5, 6].map((i) => ({ t: i * 4, me: Math.round(16 * i), ai: Math.round(14 * i) }));
+      G.buttons = [];
+      G.modal = { title: '挑战码已生成', code: 'ABC123', tip: '发给好友，他输入这串码就能挑战你这局' };
       break;
     case 'lobby':
       G.state = 'LOBBY'; G.gameMode = 'pvp'; G.pvp.roomId = 'R1X43Q8';
@@ -164,6 +178,14 @@ function runScene() {
       break;
   }
 
+  // 挑战码弹窗按钮（与引擎一致的位置）
+  if (scene === 'challenge') {
+    const bw = (375 - 92) / 2, by = 416;
+    G.buttons = [
+      { x: 40, y: by, w: bw, h: 46, label: '复制挑战码', action: 'code_copy', primary: true },
+      { x: 40 + bw + 12, y: by, w: bw, h: 46, label: '关闭', action: 'code_close' },
+    ];
+  }
   Render.render();
   // 暂停页需要再画一次按钮（pauseGame 改了 buttons）
   if (scene === 'paused') Render.render();

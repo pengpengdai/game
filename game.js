@@ -29,10 +29,15 @@ Platform.onTouchEnd((e) => {
 
 // ---- 系统键盘 ----
 Platform.onKeyboardInput((res) => {
-  if (res && typeof res.value === 'string') Game.input(res.value);
+  if (!res || typeof res.value !== 'string') return;
+  if (Game.G.codeMode) return;              // 挑战码输入：等确认再提交
+  Game.input(res.value);
 });
 Platform.onKeyboardConfirm((res) => {
-  if (res && typeof res.value === 'string') Game.input(res.value);
+  if (res && typeof res.value === 'string') {
+    if (Game.G.codeMode) { Game.submitChallengeCode(res.value); return; }
+    Game.input(res.value);
+  }
   Game.confirmClear();
 });
 Platform.onKeyboardComplete(() => {});
