@@ -5,6 +5,7 @@ let lastShare = null, cloudKv = null;
 let adCloseCb = null;
 let kbSets = 0;   // 中文模式下 setKeyboardValue 调用次数（应为 0）
 let lastClip = null;   // 剪贴板内容
+const vib = { light: 0, heavy: 0 };   // 分级震动计数
 let socketHandlers = {};
 
 const fakeSocket = {
@@ -28,7 +29,7 @@ global.tt = {
   onKeyboardInput: () => {}, onKeyboardConfirm: () => {}, onKeyboardComplete: () => {},
   getStorageSync: (k) => (storage[k] !== undefined ? storage[k] : ''),
   setStorageSync: (k, v) => { storage[k] = v; },
-  vibrateShort: () => {},
+  vibrateShort: (o) => { if (o && o.type === 'light') vib.light++; else vib.heavy++; },
   setClipboardData: (o) => { lastClip = o && o.data; },
   shareAppMessage: (o) => { lastShare = o; },
   login: ({ success }) => success({ code: 'mock-code' }),
@@ -416,6 +417,68 @@ async function main() {
     advance(3.2);
     Game.input('书中自有黄金屋');
     assert(G.playerFinished && G.result === 'lose', '分数低于好友记录 → 判负（result=' + G.result + '）');
+  }
+
+  // 21. 体感：GO 动画 / 分数飘字 / 分级震动 / 被反超反馈 / 今日最佳
+  {
+    Game.startAiGame('cn', 'easy');
+    startRace();
+    advance(3.2);
+    assert(G.fx.goAt > 0, '开局 GO 动画触发');
+    G.passage = '书中自有黄金屋书中自有颜如玉';
+    vib.light = 0; vib.heavy = 0;
+    Game.input('书');
+    assert(G.fx.floats.length >= 1 && G.fx.floats[0].text.charAt(0) === '+', '打对出现分数飘字（' + G.fx.floats[0].text + '）');
+
+    // 打满 10 字 → 一次轻震
+    let acc = '书';
+    const rest = G.passage.slice(1);
+    for (let i = 0; i < rest.length; i++) { acc += rest[i]; Game.input(acc); }
+    assert(vib.light >= 1, '每 10 字轻震一次（' + vib.light + ' 次）');
+    assert(vib.heavy === 0, '全对不触发重震');
+  }
+
+  // 22. 被反超：重震 + 红色脉冲
+  {
+    Game.startAiGame('cn', 'easy');
+    startRace();
+    advance(3.2);
+    G.passage = '书中自有黄金屋';
+    vib.heavy = 0;
+    G.aiProgress = 0.35;
+    G.typedLen = 0;
+    advance(0.1);
+    assert(G.fx.chaseAt > 0 && vib.heavy >= 1, '被反超触发重震（heavy=' + vib.heavy + '）');
+    assert(G.fx.pulseAt > 0 && G.fx.pulseColor === '225,72,63', '被反超触发红色脉冲');
+  }
+
+  // 23. 今日最佳 CPM 落盘
+  {
+    G.todayBest = 0;
+    Game.startAiGame('cn', 'easy');
+    startRace();
+    advance(3.2);
+    G.passage = '书中自有黄金屋';
+    G.startedAt = Date.now() - 20000;   // 模拟打了 20 秒
+    Game.input('书中自有黄金屋');
+    advance(2);
+    assert(G.state === 'RESULT' && G.cpm > 0, '结算 CPM 正常（' + G.cpm + '）');
+    assert(G.todayBest === G.cpm, '今日最佳已更新为本次 CPM（' + G.todayBest + '）');
+  }
+
+  // 24. 重复片段文章：不能因为尾对齐误判而跳字
+  {
+    Game.startAiGame('cn', 'easy');
+    startRace();
+    advance(3.2);
+    const p2 = '书中自有黄金屋书中自有颜如玉';
+    G.passage = p2;
+    let acc = '';
+    for (let i = 0; i < 8; i++) { acc += p2[i]; Game.input(acc); }
+    assert(G.typedLen === 8, '重复片段不跳字（typedLen=' + G.typedLen + '，应为 8）');
+    assert(G.wrongKeys === 0, '重复片段不误判错（wrongKeys=' + G.wrongKeys + '）');
+    for (let i = 8; i < p2.length; i++) { acc += p2[i]; Game.input(acc); }
+    assert(G.playerFinished && G.typedLen === p2.length, '重复片段文章可正常打完（typedLen=' + G.typedLen + '）');
   }
 
   console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');

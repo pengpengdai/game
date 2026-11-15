@@ -85,6 +85,7 @@ function runScene() {
 
   Game.bootstrap();
   G.best = 1876;
+  G.todayBest = 168;
   const fixed = 'the quick brown fox jumps over the lazy dog';
 
   function toPlay(mode) {
@@ -125,11 +126,15 @@ function runScene() {
       toPlay('en');
       G.typedLen = 14; G.totalKeys = 14; G.score = 320; G.combo = 12; G.maxCombo = 12;
       G.aiProgress = 0.42; G.elapsed = 9.5;
+      G.fx.goAt = Date.now() - 200;
+      G.fx.floats = [{ text: '+38', at: Date.now() }];
       break;
     case 'playcn':
       toPlay('cn');
       G.typedLen = 6; G.totalKeys = 7; G.wrongKeys = 1; G.score = 120; G.combo = 0;
       G.aiProgress = 0.55; G.elapsed = 8;
+      G.fx.floats = [{ text: '+12', at: Date.now() }];
+      G.fx.bubble = { text: G.aiRole.lead, at: Date.now() };
       break;
     case 'playerr':
       toPlay('en');

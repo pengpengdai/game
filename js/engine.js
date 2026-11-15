@@ -31,6 +31,7 @@ const AI_ROLES = [
 const ROLE_BY_LEVEL = { easy: 0, normal: 1, hard: 2 };
 const MILESTONES = [25, 50, 75];
 const BEST_KEY = 'tp_best';
+const TODAY_KEY = 'tp_today_best';   // 今日最佳 CPM（每日刷新）
 const REVIVE_DAY_LIMIT = 5;
 const PVP_REPORT_GAP = 120;   // 进度上报间隔 ms
 
@@ -110,6 +111,7 @@ const G = {
   reviveUsed: false, slowUsed: false, aiPauseUntil: 0,
   slowBtn: null,
   aiRole: AI_ROLES[0],                 // 当前 AI 人格
+  todayBest: 0,                        // 今日最佳 CPM
   challenge: null,                     // 挑战码对局信息（幽灵对手）
   curve: [], curveAt: 0,               // 速度曲线采样
   milestoneDone: {},                   // 已播报的里程碑
@@ -304,6 +306,11 @@ function buildResultButtons() {
 function bootstrap() {
   try { G.best = Number(Platform.getStorageSync(BEST_KEY)) || 0; } catch (e) { G.best = 0; }
   try {
+    const t = JSON.parse(Platform.getStorageSync(TODAY_KEY) || '{}');
+    const day = new Date().toISOString().slice(0, 10);
+    G.todayBest = (t && t.day === day) ? (Number(t.cpm) || 0) : 0;
+  } catch (e) { G.todayBest = 0; }
+  try {
     const savedKb = Platform.getStorageSync(KB_KEY);
     if (savedKb === 'q9' || savedKb === 'q26') G.kb.layout = savedKb;
   } catch (e) {}
@@ -367,6 +374,7 @@ function resetRound() {
   G.pvp.peerFinished = false; G.pvp.peerLeft = false;
   G.curve = []; G.curveAt = 0; G.curveAcc = 0; G.milestoneDone = {};
   G.fx.milestone = null; G.fx.bubble = null; G.fx.finisherAt = 0; G.fx.tauntDone = false;
+  G.fx.floats = []; G.fx.goAt = 0; G.fx.pulseAt = 0; G.fx.pulseColor = ''; G.fx.chaseAt = 0;
   G.startedAt = Date.now();
 }
 
@@ -455,6 +463,7 @@ function startPlay() {
   G.kb.t9 = {};
   G.kb.lastSlot = -1;
   G.buttons = buildPlayButtons();
+  G.fx.goAt = Date.now();
   if (G.mode === 'cn') openKeyboard();
   Audio.play('click');
 }
@@ -699,8 +708,16 @@ function inputCn(value) {
   // 对齐 B：输入框只含「当前进度之后」的内容（输入框被系统清空后继续打）
   let mT = 0;
   while (mT < clean.length && G.matchedCn + mT < pm.length && clean[mT] === pm[G.matchedCn + mT].ch) mT++;
-  const fromStart = m0 >= G.matchedCn + mT;
-  const abs = fromStart ? m0 : G.matchedCn + mT;
+  // 优先「从头对齐」：只要输入框里包含了已打内容（m0 >= 已匹配数）就以它为准，
+  // 避免文章有重复片段时尾对齐误判跳字；仅当输入框被系统清空后才用尾对齐。
+  let fromStart = true, abs;
+  if (m0 >= G.matchedCn) {
+    abs = m0;
+  } else {
+    fromStart = false;
+    abs = m0;                        // 从头也没走通，尾部也没走通 → 不推进
+    if (G.matchedCn + mT > abs) abs = G.matchedCn + mT;
+  }
 
   if (abs > G.matchedCn) {
     const adv = abs - G.matchedCn;
@@ -716,11 +733,15 @@ function inputCn(value) {
     Audio.playKey(G.combo);
     G.fx.lastCharAt = Date.now();
     checkMilestone();
+    G.fx.floats.push({ text: '+' + (adv * (10 + Math.min(G.combo, 50) || 0)), at: Date.now() });
+    if (G.fx.floats.length > 6) G.fx.floats.shift();
     if (G.combo >= 5 && G.combo % 5 === 0) {
       Audio.play('combo');
       G.fx.comboAt = Date.now();
       G.fx.comboValue = G.combo;
     }
+    if (G.combo >= 10 && G.combo % 10 === 0) { G.fx.pulseAt = Date.now(); G.fx.pulseColor = '255,107,53'; }
+    if (G.totalKeys > 0 && G.totalKeys % 10 === 0) Platform.vibrateLight();
     G.cnErrSig = '';
     if (!G.kb.visible) G.buttons = buildPlayButtons();
     if (G.gameMode === 'pvp') reportProgress();
@@ -770,7 +791,7 @@ function input(value) {
     G.combo = 0;
     G.flash = 0.5;
     G.fx.errAt = Date.now();
-    Platform.vibrateShort();
+    Platform.vibrateHeavy();
     Audio.play('error');
     Platform.setKeyboardValue('');
     return;
@@ -785,11 +806,15 @@ function input(value) {
     Audio.playKey(G.combo);
     G.fx.lastCharAt = Date.now();
     checkMilestone();
+    G.fx.floats.push({ text: '+' + (adv * (10 + Math.min(G.combo, 50) || 0)), at: Date.now() });
+    if (G.fx.floats.length > 6) G.fx.floats.shift();
     if (G.combo >= 5 && G.combo % 5 === 0) {
       Audio.play('combo');
       G.fx.comboAt = Date.now();
       G.fx.comboValue = G.combo;
     }
+    if (G.combo >= 10 && G.combo % 10 === 0) { G.fx.pulseAt = Date.now(); G.fx.pulseColor = '255,107,53'; }
+    if (G.totalKeys > 0 && G.totalKeys % 10 === 0) Platform.vibrateLight();
     Platform.setKeyboardValue('');
     if (G.gameMode === 'pvp') reportProgress();
 
@@ -924,6 +949,13 @@ function update(dt) {
             Platform.hideKeyboard();
           }
         }
+        // 被反超瞬间：重震 + 红色脉冲
+        if (!G.fx.chaseAt && G.aiProgress > G.typedLen / (G.passage.length || 1) + 0.02 && G.aiProgress > 0.15) {
+          G.fx.chaseAt = Date.now();
+          G.fx.pulseAt = Date.now();
+          G.fx.pulseColor = '225,72,63';
+          Platform.vibrateHeavy();
+        }
         // AI 垃圾话：过半时冒一次气泡（领先就嘲讽、落后就夸）
         if (G.aiRole && !G.fx.tauntDone && G.aiProgress >= 0.5) {
           G.fx.tauntDone = true;
@@ -957,6 +989,15 @@ function finishRound(myStats, peerStats) {
     ? Math.round(G.totalKeys / (G.totalKeys + G.wrongKeys) * 100) : 100;
   G.rank = rankFor(G.mode, G.cpm);
   G.state = 'RESULT';
+
+  // 今日最佳 CPM（首页展示 + 冲榜钩子）
+  try {
+    const day = new Date().toISOString().slice(0, 10);
+    if (G.cpm > (Number(G.todayBest) || 0)) {
+      G.todayBest = G.cpm;
+      Platform.setStorageSync(TODAY_KEY, JSON.stringify({ day: day, cpm: G.cpm }));
+    }
+  } catch (e) {}
 
   const isNewBest = G.score > G.best;
   if (isNewBest) {

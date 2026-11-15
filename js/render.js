@@ -179,11 +179,16 @@ function drawHome() {
   const T = L.top || 0;
   bg();
 
-  // 品牌区（预留状态栏高度）
-  fillRR(22, T + 40, 44, 44, 12, C.orange);
-  iconBolt(22 + 12, T + 48, 22, '#FFFFFF');
+  // 品牌区（预留状态栏高度）+ 键帽轻微呼吸跳动
+  const bob = Math.sin(Date.now() / 650) * 2;
+  fillRR(22, T + 40 + bob, 44, 44, 12, C.orange);
+  iconBolt(22 + 12, T + 48 + bob, 22, '#FFFFFF');
   txt('打字比赛', 78, T + 52, 24, C.ink, 'left', 800);
   txt('速度竞技 · AI 对决 / 好友对战', 78, T + 74, 11, C.muted, 'left', 400);
+  if (G.todayBest > 0) {
+    fillRR(W - 118, T + 62, 96, 22, 11, 'rgba(201,138,46,0.12)');
+    txt('今日 ' + G.todayBest + ' 字/分', W - 70, T + 73, 10, C.gold, 'center', 700);
+  }
 
   // 音效
   drawButton(G.buttons.find((b) => b.action === 'sound'));
@@ -390,6 +395,117 @@ function drawLobby() {
 }
 
 // ========== 对局 ==========
+// ---- 体感层：打字符粒子 / 分数飘字 / 全屏脉冲 / 紧迫感 ----
+let lastTypedSeen = 0;
+let particles = [];
+let particleFrame = 0;
+const charPos = {};
+
+function syncParticles() {
+  if (G.typedLen < lastTypedSeen) { lastTypedSeen = G.typedLen; particles = []; return; }
+  if (G.typedLen === lastTypedSeen) return;
+  const colors = [C.orange, C.gold, C.green];
+  for (let i = lastTypedSeen; i < G.typedLen; i++) {
+    const q = charPos[i];
+    if (!q) continue;
+    for (let k = 0; k < 3; k++) {
+      particles.push({
+        x: q.x + q.w / 2 + (Math.random() - 0.5) * q.w,
+        y: q.y - 2,
+        vx: (Math.random() - 0.5) * 28,
+        vy: -20 - Math.random() * 22,
+        life: 0.5 + Math.random() * 0.15, max: 0.65,
+        r: 1.5 + Math.random() * 2.2,
+        color: colors[(i + k) % 3],
+      });
+    }
+  }
+  lastTypedSeen = G.typedLen;
+  if (particles.length > 120) particles.splice(0, particles.length - 120);
+}
+
+function drawParticles() {
+  const now = performance.now();
+  const dt = Math.min(0.04, (now - (particleFrame || now)) / 1000);
+  particleFrame = now;
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 62 * dt;
+    ctx.globalAlpha = Math.max(0, p.life / p.max);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawFloats() {
+  const lp = L.play;
+  const list = G.fx.floats || [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const f = list[i];
+    const age = (Date.now() - f.at) / 900;
+    if (age >= 1) { list.splice(i, 1); continue; }
+    ctx.save();
+    ctx.globalAlpha = 1 - age;
+    txt(f.text, lp.panelX + 40 + i * 2, lp.panelY + 26 - age * 30, 14, C.orangeDeep, 'left', 800);
+    ctx.restore();
+  }
+}
+
+function drawPulse() {
+  if (!G.fx.pulseAt) return;
+  const age = (Date.now() - G.fx.pulseAt) / 600;
+  if (age >= 1) { G.fx.pulseAt = 0; return; }
+  ctx.fillStyle = 'rgba(' + (G.fx.pulseColor || '255,107,53') + ',' + (0.20 * (1 - age)).toFixed(3) + ')';
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawTension() {
+  if (G.state !== 'PLAY' && G.state !== 'COUNTDOWN' && G.state !== 'PAUSED') return;
+  const total = Math.max(1, G.passage.length);
+  const myP = G.typedLen / total;
+  const aiP = G.gameMode === 'pvp'
+    ? (G.pvp.peerFinished ? 1 : (G.pvp.peerTypedLen || 0) / total)
+    : G.aiProgress;
+  const gap = aiP - myP;
+  const cy = (L.top + H - L.bottom) / 2;
+  if (gap > 0.12) {
+    // 落后：边缘红晕呼吸
+    const a = Math.min(0.42, 0.14 + gap * 0.5) * (0.72 + 0.28 * Math.sin(Date.now() / 240));
+    const g = ctx.createRadialGradient(W / 2, cy, H * 0.30, W / 2, cy, H * 0.70);
+    g.addColorStop(0, 'rgba(225,72,63,0)');
+    g.addColorStop(1, 'rgba(225,72,63,' + a.toFixed(3) + ')');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  } else if (myP - aiP > 0.15 && myP > 0.15) {
+    // 领先：暖光包围
+    const g = ctx.createRadialGradient(W / 2, cy, H * 0.34, W / 2, cy, H * 0.74);
+    g.addColorStop(0, 'rgba(255,176,80,0)');
+    g.addColorStop(1, 'rgba(255,176,80,0.15)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+function drawGo() {
+  if (!G.fx.goAt) return;
+  const age = (Date.now() - G.fx.goAt) / 1000;
+  if (age > 0.55) { G.fx.goAt = 0; return; }
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, 1 - age / 0.55);
+  const sc = 0.72 + age * 1.5;
+  ctx.translate(W / 2, (L.top + H - L.bottom) / 2 - 40);
+  ctx.scale(sc, sc);
+  txt('GO!', 0, 0, 46, C.orange, 'center', 800);
+  ctx.restore();
+}
+
 function drawBubble() {
   if (!G.fx.bubble) return;
   const age = (Date.now() - G.fx.bubble.at) / 1000;
@@ -454,13 +570,19 @@ function drawFinisher() {
 
 function drawBattle() {
   bg();
+  drawTension();
   drawScoreboard();
   drawStatChips();
   drawPassageCard();
+  syncParticles();
+  drawParticles();
+  drawFloats();
 
   drawBubble();
   drawMilestone();
   drawFinisher();
+  drawPulse();
+  drawGo();
 
   if (G.kb.visible) drawKeyboard();
   else if (G.state === 'READY') drawKbPlaceholder();
@@ -654,6 +776,7 @@ function drawPassageCard() {
   const viewH = Math.max(1, Math.floor((lp.panelH - 34) / lineH));
   const from = Math.max(0, Math.min(curLine - viewH + 1, lines.length - viewH));
 
+  for (const key in charPos) delete charPos[key];
   for (let li = from; li < lines.length && li < from + viewH; li++) {
     const ln = lines[li];
     const y = lp.panelY + 26 + (li - from) * lineH;
@@ -677,6 +800,7 @@ function drawPassageCard() {
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText(ch, x, y);
+      charPos[idx] = { x: x, y: y, w: cw };
       x += cw;
     }
   }
@@ -861,7 +985,10 @@ function drawSpeedCurve() {
   txt('速度曲线', x, y - 5, 9, C.muted, 'left', 400);
   txt(G.gameMode === 'pvp' ? '我 / 对手' : '我 / 对手', x + w, y - 5, 9, C.muted, 'right', 400);
 
-  const tMax = Math.max(1, pts[pts.length - 1].t);
+  const reveal = Math.min(1, (Date.now() - (G.fx.resultAt || 0)) / 700);
+  const n = Math.max(2, Math.ceil(pts.length * reveal));
+  const shown = pts.slice(0, n);
+  const tMax = Math.max(1, shown[shown.length - 1].t);
   const vMax = Math.max(1, G.passage.length);
   const px = (t) => x + (t / tMax) * w;
   const py = (v) => y + 6 + (1 - Math.min(1, v / vMax)) * (h - 8);
@@ -879,8 +1006,8 @@ function drawSpeedCurve() {
 
   const line = (key, color, width) => {
     ctx.beginPath();
-    for (let i = 0; i < pts.length; i++) {
-      const X = px(pts[i].t), Y = py(pts[i][key] || 0);
+    for (let i = 0; i < shown.length; i++) {
+      const X = px(shown[i].t), Y = py(shown[i][key] || 0);
       if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y);
     }
     ctx.strokeStyle = color;
@@ -939,7 +1066,13 @@ function drawResult() {
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 3;
   ctx.stroke();
-  txt(G.rank, W / 2, lr.rankY, 32, '#fff', 'center', 800);
+  ctx.save();
+  ctx.translate(W / 2, lr.rankY);
+  const flip = Math.min(1, t / 460);
+  const sy = 0.55 + 0.45 * flip + Math.sin(flip * Math.PI) * 0.18;
+  ctx.scale(1, sy);
+  txt(G.rank, 0, 0, 32, '#fff', 'center', 800);
+  ctx.restore();
   txt('段位', W / 2, lr.rankY + lr.rankR + 14, 10, C.muted, 'center', 400);
 
   // 数据卡 2×2
@@ -971,7 +1104,9 @@ function drawResult() {
 
   drawSpeedCurve();
 
-  txt(String(G.score), W / 2, lr.scoreY, 30, C.gold, 'center', 800);
+  const rollT = Math.min(1, t / 900);
+  const shownScore = Math.round(G.score * (1 - Math.pow(1 - rollT, 3)));
+  txt(String(shownScore), W / 2, lr.scoreY, 30, C.gold, 'center', 800);
   txt('得分', W / 2, lr.scoreY - 22, 10, C.muted, 'center', 400);
   if (G.challenge) {
     const gapScore = G.challenge.score - G.score;

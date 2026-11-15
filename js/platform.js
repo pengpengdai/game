@@ -48,6 +48,10 @@ const Platform = {
   getStorageSync(k) { try { return api ? api.getStorageSync(k) : ''; } catch (e) { return ''; } },
   setStorageSync(k, v) { try { if (api) api.setStorageSync(k, v); } catch (e) {} },
   vibrateShort() { try { if (api && api.vibrateShort) api.vibrateShort({}); } catch (e) {} },
+  /** 轻震：打对字时每 10 字一次，几乎无感但强化节奏 */
+  vibrateLight() { try { if (api && api.vibrateShort) api.vibrateShort({ type: 'light' }); } catch (e) {} },
+  /** 重震：打错 / 被反超 */
+  vibrateHeavy() { try { if (api && api.vibrateShort) api.vibrateShort({ type: 'heavy' }); } catch (e) {} },
   shareAppMessage(obj) { try { if (api && api.shareAppMessage) api.shareAppMessage(obj); } catch (e) {} },
 
   // ---- 登录 / 生命周期 ----
