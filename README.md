@@ -6,6 +6,8 @@
 
 | 模块 | 说明 |
 | --- | --- |
+| 首页 | 主菜单双入口：**打字比赛**（竞速二级页）/ **打字游戏**（掉落消词），今日最佳 CPM 徽章 |
+| 打字游戏（掉落消词） | 词语从上往下掉，打完整词即消除并按字数加分；漏到底部扣 1 星（默认 10 星），星星归零失败，看广告复活（星星回到 3）；每消除 12 个词升关、+1 星 |
 | 单机竞速 | 中/英双语 × 简单/普通/困难，逐字判定、连击加成、CPM/正确率、段位（S~D） |
 | 好友对战 | 建房→房间号/分享卡片→就绪→服务端同种子同文开局→实时进度互推→服务端判胜→断线重连 |
 | 激励视频 | ①失败复活（AI 回退 60%）②对手减速 5 秒 ③对战再战；服务端每日 5 次限次 |
@@ -31,7 +33,8 @@ typing-race/
 │   ├── platform.js             双端兼容层
 │   ├── config.js               SERVER_BASE + 广告位 ID
 │   ├── words.js                题库
-│   ├── engine.js               状态机/计分/AI/PVP/复活
+│   ├── engine.js               状态机/计分/AI/PVP/复活/掉落入口
+│   ├── drop.js                 掉落消词玩法（词下落/消除/星星/关卡）
 │   ├── render.js               Canvas 渲染
 │   ├── net.js                  HTTP + WS（token/心跳/重连）
 │   ├── audio.js                音效
@@ -41,7 +44,8 @@ typing-race/
 ├── server/                     服务端（Node 零依赖，可直接跑）
 │   ├── src/                    auth/db/words/minws/room/hub/routes/app/index
 │   └── test/e2e.js             E2E（16 项）
-├── test/client.test.js         客户端逻辑测试（96 项）
+├── test/client.test.js         客户端逻辑测试（106 项）
+├── test/drop.test.js           掉落玩法测试（16 项）
 └── docs/
     ├── 技术方案.md
     └── 产品文档.md

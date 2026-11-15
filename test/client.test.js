@@ -66,6 +66,7 @@ global.tt = {
 };
 
 const Game = require('../js/engine');
+const Drop = require('../js/drop');
 const Net = require('../js/net');
 const Config = require('../js/config');
 const G = Game.G;
@@ -479,6 +480,36 @@ async function main() {
     assert(G.wrongKeys === 0, '重复片段不误判错（wrongKeys=' + G.wrongKeys + '）');
     for (let i = 8; i < p2.length; i++) { acc += p2[i]; Game.input(acc); }
     assert(G.playerFinished && G.typedLen === p2.length, '重复片段文章可正常打完（typedLen=' + G.typedLen + '）');
+  }
+
+  // 25. 首页重构：主菜单双入口 + 进入二级页
+  {
+    Game.gotoHome();
+    assert(G.state === 'HOME', '回到主菜单（state=' + G.state + '）');
+    assert(G.buttons.some((b) => b.action === 'menu_race') && G.buttons.some((b) => b.action === 'menu_drop'),
+      '主菜单有「打字比赛」「打字游戏」两个入口');
+    tapAction('menu_race');
+    assert(G.state === 'RACE_HOME' && G.buttons.some((b) => b.action === 'start'), '「打字比赛」进入竞速二级页（state=' + G.state + '）');
+    tapAction('level:hard');
+    assert(G.level === 'hard', '二级页仍可切换难度');
+    Game.gotoHome();
+    tapAction('menu_drop');
+    assert(G.state === 'DROP' && Drop.S.on && Drop.S.words.length >= 1, '「打字游戏」进入掉落玩法（词数=' + Drop.S.words.length + '）');
+  }
+
+  // 26. 掉落玩法：星星耗尽 → 失败页 → 看广告复活继续
+  {
+    Drop.S.stars = 1;
+    Drop.S.words = [{ id: 99, text: '你好', typed: '', lane: 0, x: 40, y: Drop.S.lineY - 18, w: 60, speed: 1 }];
+    for (let i = 0; i < 10; i++) Game.update(0.05);
+    assert(G.state === 'DROP_RESULT', '星星耗尽进入失败页（state=' + G.state + '）');
+    assert(G.buttons.some((b) => b.action === 'drop_revive'), '失败页有「看广告复活」');
+    assert(G.buttons.some((b) => b.action === 'drop_again') && G.buttons.some((b) => b.action === 'drop_home'), '失败页有「再来一局」「返回首页」');
+    tapAction('drop_revive');
+    adComplete();
+    assert(G.state === 'DROP' && Drop.S.stars === 3 && Drop.S.revived === true, '复活后回到对局、3 颗星（stars=' + Drop.S.stars + '）');
+    tapAction('drop_quit');
+    assert(G.state === 'HOME', '掉落到主菜单（state=' + G.state + '）');
   }
 
   console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');

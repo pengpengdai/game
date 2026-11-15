@@ -8,6 +8,7 @@ const Words = require('./words');
 const Net = require('./net');
 const Audio = require('./audio');
 const Ad = require('./ad');
+const Drop = require('./drop');
 const Config = require('./config');
 
 const sys = Platform.getSystemInfoSync();
@@ -66,6 +67,11 @@ const LAYOUT = {
     lbBtnY: TOP_INSET + 508, lbBtnW: 128, lbBtnH: 44,
     soundX: W - 66, soundY: TOP_INSET + 16, soundW: 54, soundH: 32,
     lbModal: { x: 24, y: TOP_INSET + 120, w: W - 48, h: 386, closeY: TOP_INSET + 448 },
+  },
+  main: {
+    cardX: 22, cardW: W - 44,
+    card1Y: TOP_INSET + 132, card2Y: TOP_INSET + 264, cardH: 116,
+    tipY: TOP_INSET + 402,
   },
   lobby: {
     titleY: TOP_INSET + 84, subY: TOP_INSET + 110,
@@ -235,7 +241,68 @@ function submitChallengeCode(value) {
   }).catch(() => Platform.showToast('网络异常，稍后再试'));
 }
 
-function buildHomeButtons() {
+function buildMainButtons() {
+  const M = LAYOUT.main;
+  setButtons([
+    { x: M.cardX, y: M.card1Y, w: M.cardW, h: M.cardH, label: '', action: 'menu_race', card: true },
+    { x: M.cardX, y: M.card2Y, w: M.cardW, h: M.cardH, label: '', action: 'menu_drop', card: true },
+    { x: LAYOUT.home.soundX, y: LAYOUT.home.soundY, w: LAYOUT.home.soundW, h: LAYOUT.home.soundH, label: G.soundOn ? '♪ 开' : '♪ 关', action: 'sound', small: true },
+  ]);
+}
+
+/** 进入「打字游戏」（掉落消词） */
+function startDrop(lang) {
+  G.state = 'DROP';
+  G.gameMode = 'drop';
+  G.modal = null;
+  G.codeMode = false;
+  Drop.start(lang || G.mode);
+  buildDropButtons();
+  Platform.showKeyboard({ maxLength: 40, multiple: false, confirmHold: false, confirmType: 'done', defaultValue: '' });
+  Audio.play('click');
+}
+
+function buildDropButtons() {
+  setButtons([{ x: W - 70, y: TOP_INSET + 8, w: 56, h: 30, label: '退出', action: 'drop_quit', small: true }]);
+}
+
+/** 掉落玩法结束：星星耗尽 */
+function finishDrop() {
+  G.state = 'DROP_RESULT';
+  G.kb.visible = false;
+  Platform.hideKeyboard();
+  Audio.play('lose');
+  Platform.vibrateHeavy();
+  buildDropResultButtons();
+}
+
+function buildDropResultButtons() {
+  const L = LAYOUT.result;
+  const bw = (W - 44 - 12) / 2;
+  const mk = (col, row, label, action, primary) => ({
+    x: 22 + col * (bw + 12), y: L.btnY + row * 58, w: bw, h: 46, label, action, primary: !!primary,
+  });
+  const list = [];
+  if (!Drop.S.revived) list.push(mk(0, 0, '看广告复活', 'drop_revive', true), mk(1, 0, '再来一局', 'drop_again'));
+  else list.push(mk(0, 0, '再来一局', 'drop_again', true), mk(1, 0, '返回首页', 'drop_home'));
+  if (Drop.S.revived) setButtons(list);
+  else setButtons([list[0], list[1], mk(0, 1, '返回首页', 'drop_home')]);
+}
+
+/** 看广告复活：星星回到 3 颗，继续本局 */
+function dropRevive() {
+  Ad.show(Config.AD_REVIVE, (ok) => {
+    if (!ok) return;
+    Drop.revive();
+    G.state = 'DROP';
+    G.gameMode = 'drop';
+    buildDropButtons();
+    Platform.showKeyboard({ maxLength: 40, multiple: false, confirmHold: false, confirmType: 'done', defaultValue: '' });
+    Platform.showToast('复活成功，守住星星！');
+  });
+}
+
+function buildRaceButtons() {
   const L = LAYOUT.home;
   const M = L.lbModal;
   if (G.lb.showFriend || G.lb.showGlobal) {
@@ -315,7 +382,7 @@ function bootstrap() {
     if (savedKb === 'q9' || savedKb === 'q26') G.kb.layout = savedKb;
   } catch (e) {}
   G.soundOn = Platform.getStorageSync('tp_sound_on') !== '0';
-  buildHomeButtons();
+  buildMainButtons();
   handleLaunchOptions(Platform.getLaunchOptionsSync());
 }
 
@@ -323,6 +390,27 @@ function handleLaunchOptions(opts) {
   if (!opts || !opts.query) return;
   const roomId = opts.query.roomId;
   if (roomId) G.pendingJoinRoom = String(roomId);
+}
+
+function gotoRaceHome() {
+  G.state = 'RACE_HOME';
+  G.gameMode = 'ai';
+  G.pvp.waitingRematch = false;
+  G.kb.visible = false;
+  G.countdown = 0;
+  G.pause.total = 0;
+  G.pause.startedAt = 0;
+  G.lastInput = '';
+  G.inputBase = 0;
+  G.matchedCn = 0;
+  G.cnErrSig = '';
+  G.passMapSrc = null;
+  G.modal = null;
+  G.codeMode = false;
+  Drop.S.on = false;
+  buildRaceButtons();
+  Platform.hideKeyboard();
+  Audio.play('click');
 }
 
 function gotoHome() {
@@ -338,7 +426,10 @@ function gotoHome() {
   G.matchedCn = 0;
   G.cnErrSig = '';
   G.passMapSrc = null;
-  buildHomeButtons();
+  G.modal = null;
+  G.codeMode = false;
+  Drop.S.on = false;
+  buildMainButtons();
   Platform.hideKeyboard();
   Audio.play('click');
 }
@@ -767,6 +858,7 @@ function inputCn(value) {
 }
 
 function input(value) {
+  if (G.state === 'DROP') { Drop.input(value); return; }
   if (G.state !== 'PLAY') return;
   if (G.gameMode === 'ai' && G.gameOver) return;
   if (G.gameMode === 'pvp' && G.playerFinished) return;
@@ -912,6 +1004,12 @@ function rematchPvp() {
 function update(dt) {
   if (G.flash > 0) G.flash -= dt;
 
+  if (G.state === 'DROP') {
+    Drop.update(dt);
+    if (Drop.S.over) finishDrop();
+    return;
+  }
+
   if (G.state === 'PAUSED') return;   // 暂停：冻结计时与 AI
 
   if (G.state === 'COUNTDOWN') {
@@ -1049,14 +1147,14 @@ async function openGlobalLb() {
     if (res) { G.lb.globalList = res.list || []; G.lb.mine = res.mine || null; }
     refreshOpenData();
   }
-  buildHomeButtons();
+  buildRaceButtons();
 }
 
 function toggleFriendLb() {
   G.lb.showFriend = !G.lb.showFriend;
   G.lb.showGlobal = false;
   refreshOpenData();
-  buildHomeButtons();
+  buildRaceButtons();
 }
 
 // ========== 点击 ==========
@@ -1075,7 +1173,13 @@ function tap(x, y) {
     const b = G.buttons[i];
     if (x < b.x || x > b.x + b.w || y < b.y || y > b.y + b.h) continue;
     const a = b.action;
-    if (a === 'start' || a === 'again') startAiGame(G.mode, G.level);
+    if (a === 'menu_race') gotoRaceHome();
+    else if (a === 'menu_drop') startDrop('cn');
+    else if (a === 'drop_quit') gotoHome();
+    else if (a === 'drop_again') startDrop(Drop.S.lang);
+    else if (a === 'drop_home') gotoHome();
+    else if (a === 'drop_revive') dropRevive();
+    else if (a === 'start' || a === 'again') startAiGame(G.mode, G.level);
     else if (a === 'pvp') startPvpLobby();
     else if (a === 'home') gotoHome();
     else if (a === 'share') shareResult();
@@ -1087,7 +1191,7 @@ function tap(x, y) {
     else if (a === 'lb_friend') toggleFriendLb();
     else if (a === 'lb_global') openGlobalLb();
     else if (a === 'sound') toggleSound();
-    else if (a === 'lb_close') { G.lb.showFriend = false; G.lb.showGlobal = false; buildHomeButtons(); }
+    else if (a === 'lb_close') { G.lb.showFriend = false; G.lb.showGlobal = false; buildRaceButtons(); }
     else if (a === 'challenge_entry') openChallengeInput();
     else if (a === 'make_challenge') makeChallenge();
     else if (a === 'code_copy') { Platform.setClipboardData(G.modal && G.modal.code); Platform.showToast('挑战码已复制'); }
@@ -1110,8 +1214,8 @@ function tap(x, y) {
     else if (a === 'resume') resumeGame();
     else if (a === 'pause_home') gotoHome();
     else if (a === 'kb_show') openKeyboard();
-    else if (a.indexOf('mode:') === 0) { G.mode = a.slice(5); buildHomeButtons(); }
-    else if (a.indexOf('level:') === 0) { G.level = a.slice(6); buildHomeButtons(); }
+    else if (a.indexOf('mode:') === 0) { G.mode = a.slice(5); buildRaceButtons(); }
+    else if (a.indexOf('level:') === 0) { G.level = a.slice(6); buildRaceButtons(); }
     return;
   }
 
@@ -1123,7 +1227,7 @@ function toggleSound() {
   G.soundOn = !G.soundOn;
   Platform.setStorageSync('tp_sound_on', G.soundOn ? '1' : '0');
   if (G.soundOn) { Audio.init(); Audio.startBgm(); } else Audio.stopBgm();
-  buildHomeButtons();
+  buildRaceButtons();
 }
 
 function inviteFriend() {
@@ -1150,4 +1254,5 @@ module.exports = {
   update, tap, input, confirmClear, onNet, firstTouch, handleLaunchOptions, startPlay, buildKeyboard,
   buildLobbyButtons, pauseGame, resumeGame,
   startChallenge, submitChallengeCode, makeChallenge, openChallengeInput,
+  gotoRaceHome, startDrop, finishDrop, dropRevive,
 };

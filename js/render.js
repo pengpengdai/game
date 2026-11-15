@@ -4,6 +4,7 @@
  */
 const Platform = require('./platform');
 const Game = require('./engine');
+const Drop = require('./drop');
 
 const canvas = Platform.createCanvas();
 const ctx = canvas && canvas.getContext ? canvas.getContext('2d') : null;
@@ -174,7 +175,180 @@ function iconSpeaker(x, y, on) {
 // ========== 首页 ==========
 const MILESTONES = [500, 1000, 2000, 3000, 5000, 8000];
 
+function menuCard(x, y, w, h, title, sub, kind) {
+  cardEl(x, y, w, h, 20);
+  const cx = x + 60, cy = y + h / 2;
+  if (kind === 'race') {
+    fillRR(x + 22, cy - 26, 76, 52, 14, '#FFF1E6');
+    ctx.beginPath();
+    ctx.arc(x + 60, cy, 17, 0, Math.PI * 2);
+    ctx.fillStyle = C.navy;
+    ctx.fill();
+    txt('VS', x + 60, cy, 11, '#fff', 'center', 800);
+    for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
+      fillRR(x + 24 + c * 8 + r * 2, cy + 20 + r * 7, 6, 4, 1.5, 'rgba(255,107,53,0.55)');
+    }
+  } else {
+    fillRR(x + 22, cy - 26, 76, 52, 14, '#EAF2FF');
+    const t1 = '词语', t2 = '掉落';
+    fillRR(x + 32, cy - 18, 56, 18, 9, 'rgba(31,42,68,0.88)');
+    txt(t1, x + 60, cy - 9, 9, '#fff', 'center', 700);
+    fillRR(x + 40, cy + 2, 48, 16, 8, 'rgba(255,107,53,0.92)');
+    txt(t2, x + 64, cy + 10, 9, '#fff', 'center', 700);
+  }
+  txt(title, x + 118, cy - 14, 21, C.ink, 'left', 800);
+  txt(sub, x + 118, cy + 10, 11, C.muted, 'left', 400);
+  txt('›', x + w - 26, cy, 22, C.orange, 'right', 800);
+}
+
 function drawHome() {
+  const M = L.main;
+  const T = L.top || 0;
+  bg();
+
+  const bob = Math.sin(Date.now() / 650) * 2;
+  fillRR(22, T + 40 + bob, 44, 44, 12, C.orange);
+  iconBolt(22 + 12, T + 48 + bob, 22, '#FFFFFF');
+  txt('打字比赛', 78, T + 52, 24, C.ink, 'left', 800);
+  txt('速度竞技 · 两种玩法', 78, T + 74, 11, C.muted, 'left', 400);
+  if (G.todayBest > 0) {
+    fillRR(W - 118, T + 62, 96, 22, 11, 'rgba(201,138,46,0.12)');
+    txt('今日 ' + G.todayBest + ' 字/分', W - 70, T + 73, 10, C.gold, 'center', 700);
+  }
+
+  menuCard(M.cardX, M.card1Y, M.cardW, M.cardH, '打字比赛', 'AI / 好友竞速 · 30 秒一局', 'race');
+  menuCard(M.cardX, M.card2Y, M.cardW, M.cardH, '打字游戏', '词语掉落 · 打对消除 · 守住 10 颗星', 'drop');
+
+  txt('选一个玩法开始', W / 2, M.tipY, 11, C.muted, 'center', 400);
+  drawButtons();
+}
+
+function drawDrop() {
+  const D = Drop.S;
+  const T = L.top || 0;
+  bg();
+
+  // 顶部 HUD
+  cardEl(14, T + 8, W - 28, 52, 16);
+  txt(String(D.score), 32, T + 30, 20, C.gold, 'left', 800);
+  txt('分', 32 + (String(D.score).length * 12), T + 33, 9, C.muted, 'left', 400);
+  txt('第 ' + D.level + ' 关', W / 2, T + 22, 13, C.ink, 'center', 700);
+  txt('已消除 ' + D.cleared, W / 2, T + 40, 9, C.muted, 'center', 400);
+
+  // 星星（右对齐 10 颗）
+  const starR = 5.2, gapS = 11;
+  const sx0 = W - 22 - (MAX_STAR_SLOTS - 1) * gapS;
+  for (let i = 0; i < MAX_STAR_SLOTS; i++) {
+    const filled = i < D.stars;
+    drawStar(sx0 + i * gapS, T + 34, starR, filled ? C.gold : 'rgba(34,32,29,0.14)');
+  }
+
+  // 危险线
+  const ly = D.lineY;
+  ctx.save();
+  ctx.setLineDash([6, 6]);
+  ctx.strokeStyle = 'rgba(225,72,63,0.45)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(16, ly);
+  ctx.lineTo(W - 16, ly);
+  ctx.stroke();
+  ctx.restore();
+  txt('漏到线下扣 1 ★', W / 2, ly - 9, 9, 'rgba(225,72,63,0.75)', 'center', 600);
+
+  // 掉落词
+  for (let i = 0; i < D.words.length; i++) {
+    const w = D.words[i];
+    const typed = w.typed.length;
+    const padX = 10, h = 30;
+    const x = w.x, y = w.y;
+    fillRR(x, y + 2, w.w, h, 12, 'rgba(31,42,68,0.18)');
+    fillRR(x, y, w.w, h, 12, '#FFFFFF');
+    let tx = x + padX;
+    ctx.textBaseline = 'middle';
+    for (let ci = 0; ci < w.text.length; ci++) {
+      const ch = w.text[ci];
+      ctx.font = (ci <= typed ? 700 : 600) + ' 16px ' + FONT;
+      const cw = ctx.measureText(ch).width;
+      if (ci === typed) {
+        fillRR(tx - 2, y + 5, cw + 4, 20, 6, 'rgba(255,107,53,0.18)');
+      }
+      ctx.fillStyle = ci < typed ? C.green : (ci === typed ? C.orangeDeep : 'rgba(34,32,29,0.66)');
+      ctx.textAlign = 'left';
+      ctx.fillText(ch, tx, y + h / 2);
+      tx += cw;
+    }
+  }
+
+  // 弹字
+  for (let i = D.popups.length - 1; i >= 0; i--) {
+    const p = D.popups[i];
+    const age = (Date.now() - p.at) / 900;
+    if (age >= 1) { D.popups.splice(i, 1); continue; }
+    ctx.save();
+    ctx.globalAlpha = 1 - age;
+    const color = p.color === 'red' ? C.red : (p.color === 'star' ? C.gold : C.orangeDeep);
+    txt(p.text, p.x, p.y - age * 34, 15, color, 'center', 800);
+    ctx.restore();
+  }
+
+  // 漏词红闪
+  if (D.flash > 0) {
+    ctx.fillStyle = 'rgba(225,72,63,' + (D.flash * 0.55).toFixed(3) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // 底部输入提示（系统输入法）
+  const bottomY = ly + 16;
+  cardEl(20, bottomY, W - 40, Math.max(46, H - (L.bottom || 0) - bottomY - 14), 16);
+  txt('用输入法打字 · 打对自动消除', W / 2, bottomY + 24, 12, C.ink, 'center', 700);
+  txt('打掉整词才消除 · 只打对前缀不算', W / 2, bottomY + 44, 10, C.muted, 'center', 400);
+
+  drawButtons();
+}
+
+function drawDropResult() {
+  const D = Drop.S;
+  const lr = L.result;
+  bg();
+  cardEl(22, lr.bannerY - 34, W - 44, 96, 20, { glow: 'rgba(225,72,63,0.12)' });
+  txt('星星耗尽了', W / 2, lr.bannerY, 28, C.red, 'center', 800);
+  txt('第 ' + D.level + ' 关 · 消除 ' + D.cleared + ' 个词', W / 2, lr.bannerY + 30, 12, C.muted, 'center', 400);
+
+  cardEl(22, lr.cardY, W - 44, 112, 18);
+  const cells = [
+    ['得分', String(D.score)],
+    ['消除词数', String(D.cleared)],
+    ['最高连击', '×' + D.maxCombo],
+    ['到达关卡', '第 ' + D.level + ' 关'],
+  ];
+  const cw = (W - 44 - 24) / 2;
+  for (let i = 0; i < cells.length; i++) {
+    const cxx = 22 + 14 + (i % 2) * (cw + 10);
+    const cyy = lr.cardY + 28 + Math.floor(i / 2) * 50;
+    txt(cells[i][0], cxx, cyy, 10, C.muted, 'left', 400);
+    txt(cells[i][1], cxx, cyy + 20, 17, C.ink, 'left', 800);
+  }
+  txt(D.revived ? '已用过复活' : '看广告可复活，星星回到 3 颗', W / 2, lr.curveY + 12, 11, C.muted, 'center', 400);
+  drawButtons();
+}
+
+function drawStar(cx, cy, r, color) {
+  ctx.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const a = -Math.PI / 2 + i * Math.PI * 2 / 5;
+    const a2 = a + Math.PI / 5;
+    ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    ctx.lineTo(cx + Math.cos(a2) * r * 0.45, cy + Math.sin(a2) * r * 0.45);
+  }
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+const MAX_STAR_SLOTS = 10;
+
+function drawRaceHome() {
   const lh = L.home;
   const T = L.top || 0;
   bg();
@@ -246,7 +420,7 @@ function drawPills() {
 }
 
 function drawButton(b) {
-  if (!b) return;
+  if (!b || b.card) return;
   if (b.action === 'pause') {
     ctx.beginPath();
     ctx.arc(b.x + b.w / 2, b.y + b.h / 2, b.w / 2, 0, Math.PI * 2);
@@ -537,10 +711,11 @@ function drawMilestone() {
   const lp = L.play;
   ctx.save();
   ctx.globalAlpha = age < 0.9 ? 1 : Math.max(0, (1.5 - age) / 0.6);
-  const y = lp.panelY + 10;
-  const w = 176, cx = W / 2;
-  fillRR(cx - w / 2, y, w, 34, 17, 'rgba(255,107,53,0.94)');
-  txt(G.fx.milestone.text, cx, y + 17, 12, '#fff', 'center', 700);
+  // 放在记分板顶部，避免盖住文章文字
+  const y = lp.headY + 1;
+  const w = 168, cx = W / 2;
+  fillRR(cx - w / 2, y, w, 24, 12, 'rgba(255,107,53,0.92)');
+  txt(G.fx.milestone.text, cx, y + 12, 11, '#fff', 'center', 700);
   ctx.restore();
 }
 
@@ -1146,12 +1321,15 @@ function render() {
   if (!ctx) return;
   if (!Platform.hasKeyboard) { drawNoKeyboard(); return; }
   if (G.state === 'HOME') drawHome();
+  else if (G.state === 'RACE_HOME') drawRaceHome();
   else if (G.state === 'LOBBY') drawLobby();
   else if (G.state === 'READY') { drawBattle(); drawReadyDialog(); }
   else if (G.state === 'COUNTDOWN') { drawBattle(); drawCountdown(); }
   else if (G.state === 'PLAY') { drawBattle(); drawButtons(); }
   else if (G.state === 'PAUSED') { drawBattle(); drawPaused(); }
   else if (G.state === 'RESULT') drawResult();
+  else if (G.state === 'DROP') drawDrop();
+  else if (G.state === 'DROP_RESULT') drawDropResult();
   if (G.modal) drawModal();
 }
 

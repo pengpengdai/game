@@ -42,6 +42,19 @@ const ZH = {
   ],
 };
 
+// 掉落消词玩法的词库（短词/短语，长度 2~4 字，便于快速识别与输入）
+const DROP_CN = [
+  '你好', '加油', '速度', '键盘', '比赛', '专注', '节奏', '成语', '春天', '月光',
+  '小雨', '努力', '坚持', '朋友', '开心', '漂亮', '认真', '老师', '同学', '明天',
+  '休息', '安静', '勇敢', '出发', '清风', '白云', '读书', '快乐', '理想', '飞翔',
+  '阳光', '花开', '星河', '晚安', '早餐', '地铁', '周末', '咖啡', '海边', '森林',
+  '微笑', '奔跑', '星光', '山风', '夏夜', '秋叶', '冬雪', '初心', '远方', '成长',
+];
+const DROP_EN = [
+  'sun', 'moon', 'star', 'rain', 'book', 'game', 'fast', 'type', 'key', 'win',
+  'blue', 'happy', 'light', 'music', 'smile', 'cloud', 'green', 'magic', 'night', 'river',
+];
+
 const EN = {
   easy: [
     'the quick brown fox jumps over the lazy dog',
@@ -112,4 +125,10 @@ function hashPassage(s) {
   return (h >>> 0).toString(16);
 }
 
-module.exports = { pick, pickBySeed, hashPassage, LEVELS, ZH, EN };
+/** 掉落玩法：随机取一个词 */
+function pickDrop(lang) {
+  const pool = lang === 'en' ? DROP_EN : DROP_CN;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+module.exports = { pick, pickBySeed, hashPassage, LEVELS, ZH, EN, DROP_CN, DROP_EN, pickDrop };

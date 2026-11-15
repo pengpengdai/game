@@ -184,5 +184,23 @@ Game.bootstrap();
   assert(pbtns.every((b) => b.y >= pcard.y && b.y + b.h <= pcard.y + pcard.h), '暂停按钮在卡片内');
 }
 
+// ---- 主菜单双入口 ----
+{
+  const M = L.main;
+  const c1 = R(M.cardX, M.card1Y, M.cardW, M.cardH);
+  const c2 = R(M.cardX, M.card2Y, M.cardW, M.cardH);
+  [c1, c2].forEach((x, i) => assert(inside(x), '主菜单卡片 ' + i + ' 在屏幕内'));
+  assert(c1.y + c1.h <= c2.y - 8, '两张卡片不重叠');
+  assert(c2.y + c2.h <= M.tipY, '卡片不压提示文案');
+}
+
+// ---- 掉落玩法布局 ----
+{
+  const Drop = require('../js/drop').S;
+  assert(Drop.topY > L.top, '掉落区从 HUD 下方开始（topY=' + Math.round(Drop.topY) + '）');
+  assert(Drop.lineY < H - L.bottom, '危险线在可视区内（lineY=' + Math.round(Drop.lineY) + '）');
+  assert(Drop.lineY - Drop.topY >= 240, '掉落到危险线有足够高度（' + Math.round(Drop.lineY - Drop.topY) + 'px）');
+}
+
 console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');
 process.exit(fail > 0 ? 1 : 0);
