@@ -9,6 +9,8 @@ const Net = require('./net');
 const Audio = require('./audio');
 const Ad = require('./ad');
 const Drop = require('./drop');
+const Adventure = require('./adventure');
+const Racer = require('./racer');
 const Config = require('./config');
 
 const sys = Platform.getSystemInfoSync();
@@ -67,6 +69,10 @@ const LAYOUT = {
     lbBtnY: TOP_INSET + 508, lbBtnW: 128, lbBtnH: 44,
     soundX: W - 66, soundY: TOP_INSET + 16, soundW: 54, soundH: 32,
     lbModal: { x: 24, y: TOP_INSET + 120, w: W - 48, h: 386, closeY: TOP_INSET + 448 },
+  },
+  select: {
+    cardX: 22, cardW: W - 44, cardH: 104,
+    card1Y: TOP_INSET + 122, card2Y: TOP_INSET + 234, card3Y: TOP_INSET + 346,
   },
   main: {
     cardX: 22, cardW: W - 44,
@@ -252,6 +258,105 @@ function buildMainButtons() {
     { x: M.cardX, y: M.card1Y, w: M.cardW, h: M.cardH, label: '', action: 'menu_race', card: true },
     { x: M.cardX, y: M.card2Y, w: M.cardW, h: M.cardH, label: '', action: 'menu_drop', card: true },
     { x: LAYOUT.home.soundX, y: LAYOUT.home.soundY, w: LAYOUT.home.soundW, h: LAYOUT.home.soundH, label: G.soundOn ? '♪ 开' : '♪ 关', action: 'sound', small: true },
+  ]);
+}
+
+/** 「打字游戏」主题选择页 */
+function gotoGameSelect() {
+  G.state = 'GAME_SELECT';
+  G.kb.visible = false;
+  G.modal = null;
+  buildSelectButtons();
+  Platform.hideKeyboard();
+  Audio.play('click');
+}
+
+function buildSelectButtons() {
+  const S = LAYOUT.select;
+  setButtons([
+    { x: S.cardX, y: S.card1Y, w: S.cardW, h: S.cardH, label: '', action: 'pick_adv', card: true },
+    { x: S.cardX, y: S.card2Y, w: S.cardW, h: S.cardH, label: '', action: 'pick_race', card: true },
+    { x: S.cardX, y: S.card3Y, w: S.cardW, h: S.cardH, label: '', action: 'pick_drop', card: true },
+    backBtn('home'),
+  ]);
+}
+
+/** 对局内的通用按钮：返回 + 唤起键盘 */
+function buildTypingButtons(backAction) {
+  const bottom = H - BOTTOM_INSET;
+  setButtons([
+    backBtn(backAction || 'home'),
+    { x: 20, y: Math.max(bottom - 96, TOP_INSET + 420), w: W - 40, h: 44, label: '点此唤起键盘', action: 'kb_show', secondary: true },
+  ]);
+}
+
+function startAdventure() {
+  G.state = 'ADV';
+  G.gameMode = 'adv';
+  Adventure.start();
+  buildTypingButtons('home');
+  Platform.showKeyboard({ maxLength: 60, multiple: false, confirmHold: false, confirmType: 'done', defaultValue: '' });
+  Audio.play('click');
+}
+
+function finishAdventure() {
+  G.state = 'ADV_RESULT';
+  Platform.hideKeyboard();
+  Audio.play('lose');
+  Platform.vibrateHeavy();
+  buildAdvResultButtons();
+}
+
+function buildAdvResultButtons() {
+  const L = LAYOUT.result;
+  const bw = (W - 44 - 12) / 2;
+  const mk = (col, row, label, action, primary) => ({
+    x: 22 + col * (bw + 12), y: L.btnY + row * 58, w: bw, h: 46, label, action, primary: !!primary,
+  });
+  if (Adventure.A.revived) {
+    setButtons([mk(0, 0, '再来一次', 'adv_again', true), mk(1, 0, '返回首页', 'home'), backBtn('home')]);
+  } else {
+    setButtons([mk(0, 0, '看广告复活', 'adv_revive', true), mk(1, 0, '再来一次', 'adv_again'),
+      mk(0, 1, '返回首页', 'home'), backBtn('home')]);
+  }
+}
+
+function advRevive() {
+  Ad.show(Config.AD_REVIVE, (ok) => {
+    if (!ok) return;
+    Adventure.revive();
+    G.state = 'ADV';
+    G.gameMode = 'adv';
+    buildTypingButtons('home');
+    Platform.showKeyboard({ maxLength: 60, multiple: false, confirmHold: false, confirmType: 'done', defaultValue: '' });
+    Platform.showToast('重新站起来，继续打！');
+  });
+}
+
+function startRacer() {
+  G.state = 'RACE';
+  G.gameMode = 'race';
+  Racer.start();
+  buildTypingButtons('home');
+  Platform.showKeyboard({ maxLength: 80, multiple: false, confirmHold: false, confirmType: 'done', defaultValue: '' });
+  Audio.play('click');
+}
+
+function finishRacer() {
+  G.state = 'RACE_RESULT';
+  Platform.hideKeyboard();
+  buildRaceResultButtons();
+}
+
+function buildRaceResultButtons() {
+  const L = LAYOUT.result;
+  const bw = (W - 44 - 12) / 2;
+  const mk = (col, row, label, action, primary) => ({
+    x: 22 + col * (bw + 12), y: L.btnY + row * 58, w: bw, h: 46, label, action, primary: !!primary,
+  });
+  setButtons([
+    mk(0, 0, '再赛一场', 'race_again', true), mk(1, 0, '分享战绩', 'share'),
+    mk(0, 1, '返回首页', 'home'), backBtn('home'),
   ]);
 }
 
@@ -873,6 +978,8 @@ function inputCn(value) {
 
 function input(value) {
   if (G.state === 'DROP') { Drop.input(value); return; }
+  if (G.state === 'ADV') { Adventure.input(value); return; }
+  if (G.state === 'RACE') { Racer.input(value); return; }
   if (G.state !== 'PLAY') return;
   if (G.gameMode === 'ai' && G.gameOver) return;
   if (G.gameMode === 'pvp' && G.playerFinished) return;
@@ -1021,6 +1128,16 @@ function update(dt) {
   if (G.state === 'DROP') {
     Drop.update(dt);
     if (Drop.S.over) finishDrop();
+    return;
+  }
+  if (G.state === 'ADV') {
+    Adventure.update(dt);
+    if (Adventure.A.over) finishAdventure();
+    return;
+  }
+  if (G.state === 'RACE') {
+    Racer.update(dt);
+    if (Racer.R.over) finishRacer();
     return;
   }
 
@@ -1188,7 +1305,13 @@ function tap(x, y) {
     if (x < b.x || x > b.x + b.w || y < b.y || y > b.y + b.h) continue;
     const a = b.action;
     if (a === 'menu_race') gotoRaceHome();
-    else if (a === 'menu_drop') startDrop('cn');
+    else if (a === 'menu_drop') gotoGameSelect();
+    else if (a === 'pick_adv') startAdventure();
+    else if (a === 'pick_race') startRacer();
+    else if (a === 'pick_drop') startDrop('cn');
+    else if (a === 'adv_revive') advRevive();
+    else if (a === 'adv_again') startAdventure();
+    else if (a === 'race_again') startRacer();
     else if (a === 'drop_quit') gotoHome();
     else if (a === 'drop_again') startDrop(Drop.S.lang);
     else if (a === 'drop_home') gotoHome();
@@ -1234,7 +1357,7 @@ function tap(x, y) {
   }
 
   // 没点到按钮：中文 / 掉落模式点任意空白处重新唤起系统键盘
-  if (G.state === 'DROP') openKeyboard();
+  if (G.state === 'DROP' || G.state === 'ADV' || G.state === 'RACE') openKeyboard();
   else if (G.state === 'PLAY' && G.mode === 'cn') openKeyboard();
 }
 
@@ -1269,5 +1392,6 @@ module.exports = {
   update, tap, input, confirmClear, onNet, firstTouch, handleLaunchOptions, startPlay, buildKeyboard,
   buildLobbyButtons, pauseGame, resumeGame,
   startChallenge, submitChallengeCode, makeChallenge, openChallengeInput,
-  gotoRaceHome, startDrop, finishDrop, dropRevive,
+  gotoRaceHome, startDrop, finishDrop, dropRevive, gotoGameSelect,
+  startAdventure, startRacer, finishAdventure, finishRacer, advRevive,
 };

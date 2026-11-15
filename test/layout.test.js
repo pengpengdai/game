@@ -202,5 +202,15 @@ Game.bootstrap();
   assert(Drop.lineY - Drop.topY >= 240, '掉落到危险线有足够高度（' + Math.round(Drop.lineY - Drop.topY) + 'px）');
 }
 
+// ---- 主题选择页三张卡片 ----
+{
+  const S = L.select;
+  const cards = [S.card1Y, S.card2Y, S.card3Y].map((y) => R(S.cardX, y, S.cardW, S.cardH));
+  cards.forEach((c, i) => assert(inside(c), '主题卡 ' + i + ' 在屏幕内'));
+  assert(cards[0].y + cards[0].h <= cards[1].y - 8, '冒险/赛车卡不重叠');
+  assert(cards[1].y + cards[1].h <= cards[2].y - 8, '赛车/消消乐卡不重叠');
+  assert(cards[2].y + cards[2].h <= H - L.bottom - 8, '第三张卡在安全区内');
+}
+
 console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');
 process.exit(fail > 0 ? 1 : 0);

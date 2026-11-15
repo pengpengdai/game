@@ -102,8 +102,41 @@ function runScene() {
   }
 
   const Drop = window.loadModule('drop');
+  const Adv = window.loadModule('adventure');
+  const Racer = window.loadModule('racer');
 
   switch (scene) {
+    case 'select':
+      Game.gotoGameSelect();
+      break;
+    case 'adv': {
+      Game.startAdventure();
+      const A = Adv.A;
+      A.typed = 4; A.hearts = 2; A.atkIn = 4.2; A.score = 320; A.combo = 6;
+      break;
+    }
+    case 'advresult': {
+      Game.startAdventure();
+      const A = Adv.A;
+      A.kills = 3; A.round = 2; A.score = 1240; A.maxCombo = 14; A.chars = 92; A.hearts = 0;
+      Game.finishAdventure();
+      break;
+    }
+    case 'racemode': {
+      Game.startRacer();
+      const Rc = Racer.R;
+      Rc.typed = Math.round(Rc.passage.length * 0.55);
+      Rc.rivals[0].p = 0.62; Rc.rivals[1].p = 0.48; Rc.t = 12.4;
+      break;
+    }
+    case 'raceresult': {
+      Game.startRacer();
+      const Rc = Racer.R;
+      Rc.rank = 2; Rc.t = 27.6; Rc.cpm = 148; Rc.score = 640;
+      Rc.rivals[0].p = 1; Rc.rivals[1].p = 0.78;
+      Game.finishRacer();
+      break;
+    }
     case 'race':
       Game.gotoRaceHome();
       break;

@@ -5,6 +5,8 @@
 const Platform = require('./platform');
 const Game = require('./engine');
 const Drop = require('./drop');
+const Adventure = require('./adventure');
+const Racer = require('./racer');
 
 const canvas = Platform.createCanvas();
 const ctx = canvas && canvas.getContext ? canvas.getContext('2d') : null;
@@ -220,6 +222,340 @@ function drawHome() {
   menuCard(M.cardX, M.card2Y, M.cardW, M.cardH, '打字游戏', '词语掉落 · 打对消除 · 守住 10 颗星', 'drop');
 
   txt('选一个玩法开始', W / 2, M.tipY, 11, C.muted, 'center', 400);
+  drawButtons();
+}
+
+function gameCard(x, y, w, h, title, sub, kind, tag) {
+  cardEl(x, y, w, h, 18);
+  const cx = x + 54, cy = y + h / 2;
+  fillRR(x + 18, cy - 26, 72, 52, 14, kind === 'adv' ? '#FFEFE6' : (kind === 'race' ? '#EAF2FF' : '#FFF7E2'));
+  if (kind === 'adv') {
+    ctx.beginPath();
+    ctx.arc(cx, cy + 2, 17, 0, Math.PI * 2);
+    ctx.fillStyle = '#5FB868';
+    ctx.fill();
+    ctx.fillStyle = '#2A2621';
+    ctx.beginPath();
+    ctx.arc(cx - 6, cy - 2, 3.2, 0, Math.PI * 2);
+    ctx.arc(cx + 6, cy - 2, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx, cy + 6, 6, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.strokeStyle = '#2A2621';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  } else if (kind === 'race') {
+    fillRR(cx - 18, cy - 6, 36, 14, 6, '#E1483F');
+    fillRR(cx - 10, cy - 14, 20, 10, 5, '#FF7A66');
+    ctx.beginPath();
+    ctx.arc(cx - 10, cy + 9, 5, 0, Math.PI * 2);
+    ctx.arc(cx + 10, cy + 9, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#2A2621';
+    ctx.fill();
+  } else {
+    fillRR(cx - 26, cy - 16, 34, 16, 8, 'rgba(31,42,68,0.85)');
+    txt('词', cx - 9, cy - 8, 9, '#fff', 'center', 700);
+    fillRR(cx - 10, cy + 2, 28, 14, 7, 'rgba(255,107,53,0.92)');
+    txt('消', cx + 4, cy + 9, 8, '#fff', 'center', 700);
+  }
+  txt(title, x + 104, cy - 12, 19, C.ink, 'left', 800);
+  txt(sub, x + 104, cy + 10, 10, C.muted, 'left', 400);
+  if (tag) {
+    fillRR(x + w - 74, y + 10, 62, 20, 10, 'rgba(31,42,68,0.08)');
+    txt(tag, x + w - 43, y + 20, 9, C.navy, 'center', 700);
+  }
+  txt('›', x + w - 20, cy + 12, 20, C.orange, 'right', 800);
+}
+
+function drawGameSelect() {
+  const S = L.select;
+  const T = L.top || 0;
+  bg();
+  txt('打字游戏', W / 2, T + 74, 24, C.ink, 'center', 800);
+  txt('三个主题关卡 · 选一个开始', W / 2, T + 98, 11, C.muted, 'center', 400);
+  gameCard(S.cardX, S.card1Y, S.cardW, S.cardH, '打字冒险', '打字击败怪物 · 一首诗一只怪', 'adv', 'NEW');
+  gameCard(S.cardX, S.card2Y, S.cardW, S.cardH, '打字赛车', '速度决定名次 · 比 AI 车手快', 'race', 'NEW');
+  gameCard(S.cardX, S.card3Y, S.cardW, S.cardH, '打字消消乐', '词语掉落 · 打对消除守星星', 'drop', '');
+  drawButtons();
+}
+
+function drawMonster(x, y, r, kind, color, hpPct) {
+  const squash = 1 - Math.sin(Date.now() / 420) * 0.04;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(1, squash);
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  // 眼睛
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(-r * 0.32, -r * 0.16, r * 0.24, 0, Math.PI * 2);
+  ctx.arc(r * 0.32, -r * 0.16, r * 0.24, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#2A2621';
+  ctx.beginPath();
+  ctx.arc(-r * 0.28, -r * 0.14, r * 0.10, 0, Math.PI * 2);
+  ctx.arc(r * 0.36, -r * 0.14, r * 0.10, 0, Math.PI * 2);
+  ctx.fill();
+  // 嘴
+  ctx.beginPath();
+  if (hpPct < 0.45) ctx.arc(0, r * 0.22, r * 0.26, 0.15 * Math.PI, 0.85 * Math.PI);
+  else ctx.arc(0, r * 0.30, r * 0.22, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.strokeStyle = '#2A2621';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  // 尖角（龙）
+  if (kind === 'dragon') {
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.55, -r * 0.72);
+    ctx.lineTo(-r * 0.30, -r * 1.05);
+    ctx.lineTo(-r * 0.12, -r * 0.75);
+    ctx.closePath();
+    ctx.moveTo(r * 0.55, -r * 0.72);
+    ctx.lineTo(r * 0.30, -r * 1.05);
+    ctx.lineTo(r * 0.12, -r * 0.75);
+    ctx.closePath();
+    ctx.fillStyle = C.gold;
+    ctx.fill();
+  }
+  if (kind === 'lantern') {
+    ctx.beginPath();
+    ctx.arc(0, 0, r + 6, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,147,80,0.25)';
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawAdventure() {
+  const A = Adventure.A;
+  const T = L.top || 0;
+  bg();
+  const sh = A.shake > 0 ? Math.sin(Date.now() / 36) * 6 * A.shake : 0;
+  ctx.save();
+  ctx.translate(sh, 0);
+
+  // 顶部：心 + 回合 + 分数
+  cardEl(14, T + 8, W - 28, 52, 16);
+  for (let i = 0; i < Adventure.MAX_HEARTS; i++) {
+    drawHeart(34 + i * 22, T + 30, 8, i < A.hearts ? '#E1483F' : 'rgba(225,72,63,0.20)');
+  }
+  txt('第 ' + A.round + ' 关', W / 2, T + 22, 12, C.ink, 'center', 700);
+  txt('分数 ' + A.score, W / 2, T + 40, 9, C.muted, 'center', 400);
+  txt('×' + A.combo, W - 30, T + 34, 15, A.combo >= 5 ? C.orange : C.muted, 'right', 800);
+
+  // 怪物 + 血条
+  const hpPct = 1 - A.typed / Math.max(1, A.passage.length);
+  drawMonster(W / 2, T + 150, 52, A.monster.kind, A.monster.color, hpPct);
+  txt(A.monster.name, W / 2, T + 224, 12, C.ink, 'center', 700);
+  fillRR(W / 2 - 90, T + 236, 180, 8, 4, 'rgba(34,32,29,0.10)');
+  fillRR(W / 2 - 90, T + 236, Math.max(4, 180 * hpPct), 8, 4, '#E1483F');
+
+  // 蓄力攻击条
+  const atkPct = Math.max(0, 1 - A.atkIn / Math.max(0.01, A.atkTotal));
+  fillRR(W / 2 - 90, T + 254, 180, 6, 3, 'rgba(34,32,29,0.07)');
+  fillRR(W / 2 - 90, T + 254, Math.max(3, 180 * atkPct), 6, 3, atkPct > 0.75 ? C.red : C.orange2);
+  txt(atkPct > 0.75 ? '怪物要出手了！' : '怪物蓄力 ' + A.atkIn.toFixed(1) + ' s', W / 2, T + 274, 9,
+    atkPct > 0.75 ? C.red : C.muted, 'center', 600);
+
+  // 诗句（当前要打的部分，逐字高亮）
+  const cardY = T + 292;
+  cardEl(16, cardY, W - 32, 108, 16, { stroke: A.flash > 0 ? 'rgba(225,72,63,0.7)' : undefined });
+  const poem = A.passage;
+  const perLine = 12;
+  for (let i = 0; i < Math.min(3, Math.ceil(poem.length / perLine)); i++) {
+    const line = poem.slice(i * perLine, (i + 1) * perLine);
+    const yy = cardY + 30 + i * 30;
+    let x = (W - line.length * 18) / 2;
+    for (let ci = 0; ci < line.length; ci++) {
+      const idx = i * perLine + ci;
+      const typed = idx < A.typed;
+      const cur = idx === A.typed;
+      if (cur) fillRR(x - 2, yy - 13, 20, 26, 6, 'rgba(255,107,53,0.18)');
+      txt(line.charAt(ci), x + 9, yy, 16, typed ? C.green : (cur ? C.orangeDeep : 'rgba(34,32,29,0.52)'), 'center', typed ? 700 : 500);
+      x += 18;
+    }
+  }
+
+  // 火花 / 弹字
+  for (let i = 0; i < A.sparks.length; i++) {
+    const sp = A.sparks[i];
+    ctx.globalAlpha = Math.max(0, sp.life / sp.max);
+    ctx.beginPath();
+    ctx.arc(sp.x, sp.y, 2.8, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgb(' + sp.color + ')';
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  for (let i = A.pops.length - 1; i >= 0; i--) {
+    const p = A.pops[i];
+    const age = (Date.now() - p.at) / 800;
+    if (age >= 1) { A.pops.splice(i, 1); continue; }
+    ctx.save();
+    ctx.globalAlpha = 1 - age;
+    txt(p.text, p.x, p.y - age * 26, 16, C.gold, 'center', 800);
+    ctx.restore();
+  }
+
+  if (A.flash > 0) {
+    ctx.fillStyle = 'rgba(225,72,63,' + (A.flash * 0.5).toFixed(3) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // 底部提示
+  const bottomY = cardY + 120;
+  cardEl(16, bottomY, W - 32, Math.max(48, H - (L.bottom || 0) - bottomY - 12), 16);
+  txt('用输入法打字攻击 · 打完整首击败怪物', W / 2, bottomY + 22, 11, C.ink, 'center', 700);
+  txt('打错不扣心，但会断连击', W / 2, bottomY + 42, 10, C.muted, 'center', 400);
+
+  ctx.restore();
+  drawButtons();
+}
+
+function drawHeart(x, y, r, color) {
+  ctx.beginPath();
+  ctx.moveTo(x, y + r * 0.7);
+  ctx.bezierCurveTo(x - r, y - r * 0.2, x - r * 0.5, y - r * 1.1, x, y - r * 0.45);
+  ctx.bezierCurveTo(x + r * 0.5, y - r * 1.1, x + r, y - r * 0.2, x, y + r * 0.7);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function drawRacer() {
+  const Rc = Racer.R;
+  const T = L.top || 0;
+  bg();
+
+  cardEl(14, T + 8, W - 28, 44, 14);
+  txt('打字赛车 · 速度决定名次', W / 2, T + 30, 12, C.ink, 'center', 700);
+
+  // 赛道
+  const trackX = 24, trackW = W - 48;
+  const lanes = [T + 88, T + 138, T + 188];
+  const names = ['我', ...Rc.rivals.map((r) => r.name)];
+  const colors = [C.navy, Rc.rivals[0].color, Rc.rivals[1].color];
+  const progs = [Racer.progress(), Rc.rivals[0].p, Rc.rivals[1].p];
+
+  for (let i = 0; i < 3; i++) {
+    const y = lanes[i];
+    fillRR(trackX, y + 14, trackW, 8, 4, 'rgba(34,32,29,0.07)');
+    // 终点旗
+    const fx = trackX + trackW;
+    ctx.strokeStyle = 'rgba(34,32,29,0.2)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(fx, y - 4);
+    ctx.lineTo(fx, y + 26);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(fx, y - 4);
+    ctx.lineTo(fx + 10, y);
+    ctx.lineTo(fx, y + 4);
+    ctx.closePath();
+    ctx.fillStyle = C.red;
+    ctx.fill();
+
+    const p = Math.min(1, progs[i]);
+    const cx = trackX + 8 + p * (trackW - 40);
+    fillRR(cx - 18, y - 2, 36, 14, 6, colors[i]);
+    fillRR(cx - 10, y - 10, 18, 9, 4, 'rgba(255,255,255,0.55)');
+    ctx.beginPath();
+    ctx.arc(cx - 9, y + 13, 4.5, 0, Math.PI * 2);
+    ctx.arc(cx + 9, y + 13, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(31,42,68,0.85)';
+    ctx.fill();
+    txt(names[i], trackX + 6, y + 34, 9, colors[i], 'left', 700);
+    txt(Math.round(p * 100) + '%', trackX + trackW - 14, y + 34, 9, C.muted, 'right', 400);
+  }
+
+  // 文章
+  const cardY = T + 244;
+  cardEl(16, cardY, W - 32, 96, 16, { stroke: Rc.flash > 0 ? 'rgba(225,72,63,0.7)' : undefined });
+  const pass = Rc.passage;
+  const perLine = 13;
+  for (let i = 0; i < Math.min(3, Math.ceil(pass.length / perLine)); i++) {
+    const line = pass.slice(i * perLine, (i + 1) * perLine);
+    const yy = cardY + 26 + i * 28;
+    let x = (W - line.length * 17) / 2;
+    for (let ci = 0; ci < line.length; ci++) {
+      const idx = i * perLine + ci;
+      const typed = idx < Rc.typed;
+      const cur = idx === Rc.typed;
+      if (cur) fillRR(x - 2, yy - 12, 19, 24, 5, 'rgba(255,107,53,0.18)');
+      txt(line.charAt(ci), x + 8, yy, 15, typed ? C.green : (cur ? C.orangeDeep : 'rgba(34,32,29,0.52)'), 'center', typed ? 700 : 500);
+      x += 17;
+    }
+  }
+
+  for (let i = 0; i < Rc.sparks.length; i++) {
+    const sp = Rc.sparks[i];
+    ctx.globalAlpha = Math.max(0, sp.life / sp.max);
+    ctx.beginPath();
+    ctx.arc(sp.x, sp.y, 2.4, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgb(' + sp.color + ')';
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  if (Rc.flash > 0) {
+    ctx.fillStyle = 'rgba(225,72,63,' + (Rc.flash * 0.5).toFixed(3) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  const bottomY = cardY + 110;
+  cardEl(16, bottomY, W - 32, Math.max(46, H - (L.bottom || 0) - bottomY - 12), 16);
+  txt('打字前进 · 谁先到终点谁赢', W / 2, bottomY + 22, 11, C.ink, 'center', 700);
+  txt('已用 ' + Rc.t.toFixed(1) + ' 秒 · ' + (Rc.typed) + '/' + pass.length + ' 字', W / 2, bottomY + 42, 10, C.muted, 'center', 400);
+
+  drawButtons();
+}
+
+function drawAdvResult() {
+  const A = Adventure.A;
+  const lr = L.result;
+  bg();
+  cardEl(22, lr.bannerY - 34, W - 44, 96, 20, { glow: 'rgba(225,72,63,0.12)' });
+  txt('被怪物打败了', W / 2, lr.bannerY, 28, C.red, 'center', 800);
+  txt('坚持到第 ' + A.round + ' 关 · 击败 ' + A.kills + ' 只怪', W / 2, lr.bannerY + 30, 12, C.muted, 'center', 400);
+
+  cardEl(22, lr.cardY, W - 44, 112, 18);
+  const cells = [['得分', String(A.score)], ['击败怪物', A.kills + ' 只'], ['最高连击', '×' + A.maxCombo], ['打字字数', String(A.chars)]];
+  const cw = (W - 44 - 24) / 2;
+  for (let i = 0; i < cells.length; i++) {
+    const cxx = 22 + 14 + (i % 2) * (cw + 10);
+    const cyy = lr.cardY + 28 + Math.floor(i / 2) * 50;
+    txt(cells[i][0], cxx, cyy, 10, C.muted, 'left', 400);
+    txt(cells[i][1], cxx, cyy + 20, 17, C.ink, 'left', 800);
+  }
+  txt(A.revived ? '已用过复活' : '看广告可复活，回到 2 颗心', W / 2, lr.curveY + 12, 11, C.muted, 'center', 400);
+  drawButtons();
+}
+
+function drawRaceResult() {
+  const Rc = Racer.R;
+  const lr = L.result;
+  bg();
+  const medal = Rc.rank === 1 ? '#FFD54A' : (Rc.rank === 2 ? '#CFCFCF' : '#D08A5A');
+  cardEl(22, lr.bannerY - 34, W - 44, 96, 20, { glow: 'rgba(201,138,46,0.16)' });
+  ctx.beginPath();
+  ctx.arc(W / 2, lr.bannerY - 4, 26, 0, Math.PI * 2);
+  ctx.fillStyle = medal;
+  ctx.fill();
+  txt(String(Rc.rank), W / 2, lr.bannerY - 4, 24, '#fff', 'center', 800);
+  txt(Rc.rank === 1 ? '冠军！' : '第 ' + Rc.rank + ' 名', W / 2, lr.bannerY + 34, 16, C.ink, 'center', 800);
+
+  cardEl(22, lr.cardY, W - 44, 112, 18);
+  const cells = [['用时', Rc.t.toFixed(1) + ' 秒'], ['速度', Rc.cpm + ' 字/分'], ['得分', String(Rc.score)], ['对手', Rc.rivals.map((r) => Math.round(r.p * 100) + '%').join(' / ')]];
+  const cw = (W - 44 - 24) / 2;
+  for (let i = 0; i < cells.length; i++) {
+    const cxx = 22 + 14 + (i % 2) * (cw + 10);
+    const cyy = lr.cardY + 28 + Math.floor(i / 2) * 50;
+    txt(cells[i][0], cxx, cyy, 10, C.muted, 'left', 400);
+    txt(cells[i][1], cxx, cyy + 20, 15, C.ink, 'left', 800);
+  }
+  txt('速度就是名次，再快一点试试', W / 2, lr.curveY + 12, 11, C.muted, 'center', 400);
   drawButtons();
 }
 
@@ -1428,6 +1764,11 @@ function render() {
   else if (G.state === 'RESULT') drawResult();
   else if (G.state === 'DROP') drawDrop();
   else if (G.state === 'DROP_RESULT') drawDropResult();
+  else if (G.state === 'GAME_SELECT') drawGameSelect();
+  else if (G.state === 'ADV') drawAdventure();
+  else if (G.state === 'ADV_RESULT') drawAdvResult();
+  else if (G.state === 'RACE') drawRacer();
+  else if (G.state === 'RACE_RESULT') drawRaceResult();
   if (G.modal) drawModal();
 }
 

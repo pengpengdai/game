@@ -67,6 +67,8 @@ global.tt = {
 
 const Game = require('../js/engine');
 const Drop = require('../js/drop');
+const Adventure = require('../js/adventure');
+const Racer = require('../js/racer');
 const Net = require('../js/net');
 const Config = require('../js/config');
 const G = Game.G;
@@ -494,7 +496,10 @@ async function main() {
     assert(G.level === 'hard', '二级页仍可切换难度');
     Game.gotoHome();
     tapAction('menu_drop');
-    assert(G.state === 'DROP' && Drop.S.on && Drop.S.words.length >= 1, '「打字游戏」进入掉落玩法（词数=' + Drop.S.words.length + '）');
+    assert(G.state === 'GAME_SELECT' && G.buttons.some((b) => b.action === 'pick_adv') && G.buttons.some((b) => b.action === 'pick_race') && G.buttons.some((b) => b.action === 'pick_drop'),
+      '「打字游戏」进入主题选择页（三个模式）');
+    tapAction('pick_drop');
+    assert(G.state === 'DROP' && Drop.S.on && Drop.S.words.length >= 1, '选择「打字消消乐」进入掉落玩法（词数=' + Drop.S.words.length + '）');
   }
 
   // 26. 掉落玩法：星星耗尽 → 失败页 → 看广告复活继续
@@ -525,6 +530,7 @@ async function main() {
 
     Game.gotoHome();
     tapAction('menu_drop');
+    tapAction('pick_drop');
     assert(G.state === 'DROP' && G.buttons.some((b) => b.action === 'kb_show'), '掉落页有「点此唤起键盘」');
     assert(G.buttons.some((b) => b.action === 'drop_quit' && b.ghost), '掉落页有返回按钮');
     tapAction('kb_show');
@@ -545,6 +551,39 @@ async function main() {
     const fall1 = Drop.S.words[0].y;
     for (let i = 0; i < 20; i++) Drop.update(0.05);   // 1 秒
     assert(Drop.S.words[0].y - fall1 < 26, '第 1 关 1 秒内下落不足 26px（实际 ' + Math.round(Drop.S.words[0].y - fall1) + 'px）');
+  }
+
+  // 29. 三个主题关卡：冒险 / 赛车 全链路
+  {
+    Game.gotoHome();
+    tapAction('menu_drop');
+    assert(G.state === 'GAME_SELECT', '打字游戏 → 主题选择页');
+    assert(G.buttons.filter((b) => b.card).length === 3, '选择页有 3 张主题卡');
+
+    tapAction('pick_adv');
+    assert(G.state === 'ADV' && Adventure.A.on && Adventure.A.hearts === 3, '进入打字冒险（3 心）');
+    assert(G.buttons.some((b) => b.action === 'kb_show'), '冒险页有「点此唤起键盘」');
+    Adventure.A.hearts = 1;
+    Adventure.A.atkIn = 0.05;
+    Game.update(0.1);
+    assert(G.state === 'ADV_RESULT', '心归零 → 冒险失败页');
+    assert(G.buttons.some((b) => b.action === 'adv_revive') && G.buttons.some((b) => b.action === 'adv_again'), '冒险失败页有复活/再来');
+    tapAction('adv_revive');
+    adComplete();
+    assert(G.state === 'ADV' && Adventure.A.hearts === 2, '看广告复活 → 回到 2 心继续');
+
+    Game.gotoHome();
+    tapAction('menu_drop');
+    tapAction('pick_race');
+    assert(G.state === 'RACE' && Racer.R.on, '进入打字赛车');
+    const rp = Racer.R.passage;
+    Game.input(rp);
+    Game.update(0.05);
+    assert(G.state === 'RACE_RESULT' && Racer.R.rank === 1, '飞速打完 → 赛车第一名（rank=' + Racer.R.rank + '）');
+    assert(G.buttons.some((b) => b.action === 'race_again'), '赛车结算有再赛一场');
+
+    Game.gotoHome();
+    assert(G.state === 'HOME' && G.buttons.some((b) => b.action === 'menu_drop'), '各玩法都能回主菜单');
   }
 
   console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');
