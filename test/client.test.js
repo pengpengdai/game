@@ -3,6 +3,7 @@
 const storage = {};
 let lastShare = null, cloudKv = null;
 let adCloseCb = null;
+let kbSets = 0;   // 中文模式下 setKeyboardValue 调用次数（应为 0）
 let socketHandlers = {};
 
 const fakeSocket = {
@@ -22,7 +23,7 @@ global.tt = {
   createCanvas: () => null,
   getSystemInfoSync: () => ({ windowWidth: 375, windowHeight: 667, pixelRatio: 2, statusBarHeight: 20, safeArea: { top: 20, bottom: 647 } }),
   onTouchStart: () => {}, onTouchEnd: () => {}, onTouchMove: () => {},
-  showKeyboard: () => {}, hideKeyboard: () => {}, setKeyboardValue: () => {},
+  showKeyboard: () => {}, hideKeyboard: () => {}, setKeyboardValue: () => { kbSets++; },
   onKeyboardInput: () => {}, onKeyboardConfirm: () => {}, onKeyboardComplete: () => {},
   getStorageSync: (k) => (storage[k] !== undefined ? storage[k] : ''),
   setStorageSync: (k, v) => { storage[k] = v; },
@@ -323,6 +324,36 @@ async function main() {
     assert(G.typedLen === 5, '后续拼音不误推进、不误判错（typedLen=' + G.typedLen + '）');
     Game.input('千里之行始于足下');            // 拼音被改写为汉字上屏
     assert(G.playerFinished && G.typedLen === 9, '上屏改写后仍能正确完成（typedLen=' + G.typedLen + ', finished=' + G.playerFinished + '）');
+  }
+
+  // 17. 用户报告场景：拼音与汉字混排上屏，光标不能卡在「自」
+  {
+    Game.startAiGame('cn', 'easy');
+    startRace();
+    advance(3.2);
+    G.passage = '书中自有黄金屋';
+    kbSets = 0;
+    Game.input('shu');
+    assert(G.typedLen === 0 && kbSets === 0, '拼音阶段不推进、不清空输入框（typedLen=' + G.typedLen + ', kbSets=' + kbSets + '）');
+    Game.input('书中');
+    assert(G.typedLen === 2, '上屏「书中」→ 光标到「自」（typedLen=' + G.typedLen + '）');
+    Game.input('书中ziyouhuangjinwu');
+    assert(G.typedLen === 2 && kbSets === 0, '混排拼音当噪声，不推进也不清空（typedLen=' + G.typedLen + ', kbSets=' + kbSets + '）');
+    Game.input('书中自有you黄金屋');
+    assert(G.playerFinished && G.typedLen === 7, '混排上屏仍能打到「黄金屋」并完成（typedLen=' + G.typedLen + ', finished=' + G.playerFinished + '）');
+    assert(kbSets === 0, '中文模式全程未调用 setKeyboardValue（不打断输入法）');
+  }
+
+  // 18. 输入框被系统清空后，继续从当前位置打（尾对齐）
+  {
+    Game.startAiGame('cn', 'easy');
+    startRace();
+    advance(3.2);
+    G.passage = '书中自有黄金屋';
+    Game.input('书中自有');
+    assert(G.typedLen === 4, '打到「有」后进度正确（typedLen=' + G.typedLen + '）');
+    Game.input('黄金屋');
+    assert(G.playerFinished && G.typedLen === 7, '输入框被清空后继续打也能完成（typedLen=' + G.typedLen + '）');
   }
 
   console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');
