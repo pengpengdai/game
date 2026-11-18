@@ -10,6 +10,7 @@
 </head>
 <body>
 <canvas id="cv"></canvas>
+<div id="state" style="display:none"></div>
 <input id="kbi" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
   style="position:fixed;left:50%;bottom:6px;width:2px;height:2px;opacity:0.01;border:0;padding:0;background:#fff;color:transparent;z-index:9" />
 <script>
@@ -20,7 +21,9 @@
   window.tt = {
     createCanvas: () => canvas,
     getSystemInfoSync: () => ({ windowWidth: 375, windowHeight: 667, pixelRatio: 2, platform: 'devtools', statusBarHeight: 20, safeArea: { top: 20, bottom: 647 } }),
-    onTouchStart: () => {}, onTouchEnd: () => {}, onTouchMove: () => {},
+    onTouchStart: (fn) => { window.__touchStart = fn; },
+    onTouchEnd: (fn) => { window.__touchEnd = fn; },
+    onTouchMove: () => {},
     showKeyboard: () => { const i = document.getElementById('kbi'); if (i) { i.value = ''; i.focus(); } },
     hideKeyboard: () => { const i = document.getElementById('kbi'); if (i) i.blur(); },
     setKeyboardValue: (v) => { const i = document.getElementById('kbi'); if (i) i.value = String(v || ''); },
@@ -40,6 +43,44 @@
     createInnerAudioContext: () => ({ src: '', loop: false, volume: 1, play: () => {}, stop: () => {} }),
     setInnerAudioOption: () => {}, showToast: () => {},
   };
+})();
+
+/* ---------- 画布点击 → 引擎 ---------- */
+(function () {
+  const canvas = document.getElementById('cv');
+  const kb = document.getElementById('kbi');
+  function toLogical(clientX, clientY) {
+    const r = canvas.getBoundingClientRect();
+    return {
+      x: (clientX - r.left) * (375 / r.width),
+      y: (clientY - r.top) * (667 / r.height),
+    };
+  }
+  let last = { x: 0, y: 0 };
+  function onDown(e) {
+    const t = e.touches ? e.touches[0] : e;
+    const p = toLogical(t.clientX, t.clientY);
+    last = p;
+    if (window.__touchStart) window.__touchStart({ touches: [{ clientX: p.x, clientY: p.y }] });
+    if (!window.__firstTouch) { window.__firstTouch = true; if (window.__gameFirstTouch) window.__gameFirstTouch(); }
+    // 只在打字的对局页面自动唤起输入法，避免点菜单时弹键盘
+    const G0 = window.__G;
+    if (kb && G0 && ['PLAY', 'DROP', 'ADV', 'RACE'].includes(G0.state)) kb.focus();
+  }
+  function onUp(e) {
+    const t = e.changedTouches ? e.changedTouches[0] : e;
+    const p = toLogical(t.clientX, t.clientY);
+    if (window.__touchEnd) window.__touchEnd({ changedTouches: [{ clientX: p.x, clientY: p.y }] });
+    const G = window.__G;
+    if (G && window.__gameTap) window.__gameTap(p.x, p.y);
+    const st = document.getElementById('state');
+    if (st && G) st.textContent = G.state;
+  }
+  canvas.addEventListener('touchstart', onDown, { passive: true });
+  canvas.addEventListener('touchend', onUp, { passive: true });
+  canvas.addEventListener('mousedown', onDown);
+  canvas.addEventListener('mouseup', onUp);
+  window.__previewTap = (x, y) => { if (window.__gameTap) window.__gameTap(x, y); const st = document.getElementById('state'); if (st && window.__G) st.textContent = window.__G.state; };
 })();
 
 /* ---------- 隐藏输入框 → 引擎 ---------- */
@@ -276,6 +317,21 @@ function runScene() {
   // 暂停页需要再画一次按钮（pauseGame 改了 buttons）
   if (scene === 'paused') Render.render();
   window.__G = G;
+  window.__gameTap = Game.tap;
+  window.__gameFirstTouch = Game.firstTouch;
+  const st = document.getElementById('state');
+  if (st) st.textContent = G.state;
+  const clk = q.get('click');
+  if (clk) {
+    // 支持多次点击：?click=187,210|187,426
+    clk.split('|').forEach((one) => {
+      const parts = one.split(',').map(Number);
+      if (parts.length === 2 && !isNaN(parts[0])) {
+        window.__previewTap(parts[0], parts[1]);
+        Render.render();
+      }
+    });
+  }
   window.__ready = true;
 }
 </script>
