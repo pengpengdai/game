@@ -10,6 +10,8 @@
 </head>
 <body>
 <canvas id="cv"></canvas>
+<input id="kbi" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+  style="position:fixed;left:50%;bottom:6px;width:2px;height:2px;opacity:0.01;border:0;padding:0;background:#fff;color:transparent;z-index:9" />
 <script>
 /* ---------- 小游戏 API shim（浏览器预览用）---------- */
 (function () {
@@ -19,8 +21,12 @@
     createCanvas: () => canvas,
     getSystemInfoSync: () => ({ windowWidth: 375, windowHeight: 667, pixelRatio: 2, platform: 'devtools', statusBarHeight: 20, safeArea: { top: 20, bottom: 647 } }),
     onTouchStart: () => {}, onTouchEnd: () => {}, onTouchMove: () => {},
-    showKeyboard: () => {}, hideKeyboard: () => {}, setKeyboardValue: () => {},
-    onKeyboardInput: () => {}, onKeyboardConfirm: () => {}, onKeyboardComplete: () => {},
+    showKeyboard: () => { const i = document.getElementById('kbi'); if (i) { i.value = ''; i.focus(); } },
+    hideKeyboard: () => { const i = document.getElementById('kbi'); if (i) i.blur(); },
+    setKeyboardValue: (v) => { const i = document.getElementById('kbi'); if (i) i.value = String(v || ''); },
+    onKeyboardInput: (fn) => { window.__kbInput = fn; },
+    onKeyboardConfirm: (fn) => { window.__kbConfirm = fn; },
+    onKeyboardComplete: () => {},
     getStorageSync: (k) => (store[k] === undefined ? '' : store[k]),
     setStorageSync: (k, v) => { store[k] = v; },
     vibrateShort: () => {}, shareAppMessage: () => {},
@@ -34,6 +40,20 @@
     createInnerAudioContext: () => ({ src: '', loop: false, volume: 1, play: () => {}, stop: () => {} }),
     setInnerAudioOption: () => {}, showToast: () => {},
   };
+})();
+
+/* ---------- 隐藏输入框 → 引擎 ---------- */
+(function () {
+  const i = document.getElementById('kbi');
+  if (!i) return;
+  i.addEventListener('input', () => { if (window.__kbInput) window.__kbInput({ value: i.value }); });
+  i.addEventListener('keydown', (e) => { if (e.key === 'Enter' && window.__kbConfirm) window.__kbConfirm({ value: i.value }); });
+  document.addEventListener('touchend', () => {
+    // 对局中点击画布空白处 → 唤起输入法（与引擎行为一致）
+    const G = window.__G;
+    if (!G) return;
+    if (['PLAY', 'DROP', 'ADV', 'RACE'].includes(G.state)) i.focus();
+  }, { passive: true });
 })();
 
 /* ---------- 极简 CommonJS 加载器（同步 XHR）---------- */
@@ -255,6 +275,7 @@ function runScene() {
   Render.render();
   // 暂停页需要再画一次按钮（pauseGame 改了 buttons）
   if (scene === 'paused') Render.render();
+  window.__G = G;
   window.__ready = true;
 }
 </script>
