@@ -144,11 +144,14 @@ function runScene() {
       Game.startDrop('cn');
       const D = Drop.S;
       D.score = 340; D.stars = 6; D.level = 2; D.cleared = 18; D.combo = 5; D.maxCombo = 9;
+      const C = 34;
       D.words = [
-        { id: 1, text: '你好', typed: '', lane: 0, x: 22, y: 120, w: 58, speed: 1 },
-        { id: 2, text: '加油', typed: '加', lane: 1, x: 148, y: 210, w: 58, speed: 1 },
-        { id: 3, text: '速度', typed: '', lane: 2, x: 274, y: 300, w: 58, speed: 1 },
-        { id: 4, text: '星河', typed: '', lane: 0, x: 30, y: 366, w: 58, speed: 1 },
+        { id: 1, text: '打工人', typed: '打', lane: 0, x: 26, y: 128, w: 3 * C, h: C,
+          cells: [{ cx: 0, cy: 0 }, { cx: 1, cy: 0 }, { cx: 2, cy: 0 }], speed: 1 },
+        { id: 2, text: '前程似锦', typed: '', lane: 1, x: 150, y: 196, w: 2 * C, h: 2 * C,
+          cells: [{ cx: 0, cy: 0 }, { cx: 1, cy: 0 }, { cx: 0, cy: 1 }, { cx: 1, cy: 1 }], speed: 1 },
+        { id: 3, text: '世界那么大', typed: '', lane: 2, x: 214, y: 300, w: 3 * C, h: 2 * C,
+          cells: [{ cx: 0, cy: 0 }, { cx: 1, cy: 0 }, { cx: 2, cy: 0 }, { cx: 0, cy: 1 }, { cx: 1, cy: 1 }], speed: 1 },
       ];
       D.popups = [{ text: '+24', x: 170, y: 232, at: Date.now() - 260, color: 'gold' }];
       break;

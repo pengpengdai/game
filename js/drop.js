@@ -17,6 +17,27 @@ const BOTTOM = SAFE.bottom ? Math.max(0, H - SAFE.bottom) : 0;
 
 const MAX_STARS = 10;
 const LANES = 3;
+const CELL = 34;   // 方块单元边长
+
+// 俄罗斯方块式形状：3/4/5 字，坐标 [列, 行]，按阅读顺序对应第 1..n 个字
+const SHAPES = {
+  3: [
+    [[0, 0], [1, 0], [2, 0]],
+    [[0, 0], [0, 1], [1, 1]],
+    [[0, 0], [0, 1], [0, 2]],
+  ],
+  4: [
+    [[0, 0], [1, 0], [0, 1], [1, 1]],
+    [[0, 0], [1, 0], [2, 0], [1, 1]],
+    [[0, 0], [1, 0], [1, 1], [2, 1]],
+    [[0, 0], [0, 1], [0, 2], [1, 2]],
+  ],
+  5: [
+    [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1]],
+    [[0, 0], [1, 0], [1, 1], [1, 2], [2, 2]],
+    [[0, 0], [1, 0], [1, 1], [2, 1], [2, 2]],
+  ],
+};
 const HUD_H = 66;
 const LINE_GAP = 92;
 const LEVEL_STEP = 12;      // 每关需要消除的词数
@@ -24,9 +45,9 @@ const LEVEL_STEP = 12;      // 每关需要消除的词数
 /** 关卡难度：第 1 关非常轻松，逐关加速 */
 function tuning(level) {
   return {
-    gap: Math.max(0.8, 2.6 - (level - 1) * 0.30),   // 生成间隔（秒）
-    speed: 16 + (level - 1) * 9,                    // 下落速度 px/s
-    maxWords: Math.min(9, 3 + level),               // 同屏上限
+    gap: Math.max(0.95, 3.0 - (level - 1) * 0.26),  // 生成间隔（秒，更慢）
+    speed: 11 + (level - 1) * 6,                    // 下落速度 px/s（第 1 关很慢）
+    maxWords: Math.min(6, 2 + level),               // 同屏上限（方块更大，数量更少）
   };
 }
 
@@ -55,22 +76,29 @@ function laneFree(lane) {
 }
 
 function spawn() {
-  const text = Words.pickDrop(S.lang);
+  const len = S.lang === 'en' ? 3 : 3 + Math.floor(Math.random() * 3);   // 3~5 字
+  const text = Words.pickDrop(S.lang, len);
+  const list = SHAPES[len] || SHAPES[3];
+  const shape = list[Math.floor(Math.random() * list.length)];
+  const cols = Math.max.apply(null, shape.map((c) => c[0])) + 1;
+  const rows = Math.max.apply(null, shape.map((c) => c[1])) + 1;
+  const w = cols * CELL;
+  const h = rows * CELL;
   let lane = Math.floor(Math.random() * LANES);
   for (let i = 0; i < LANES && !laneFree(lane); i++) lane = (lane + 1) % LANES;
-  const w = wordWidth(text);
   const laneW = W / LANES;
-  const jitter = (Math.random() - 0.5) * 14;
-  const x = lane * laneW + (laneW - w) / 2 + jitter;
+  const x = Math.max(6, Math.min(W - w - 6, lane * laneW + (laneW - w) / 2 + (Math.random() - 0.5) * 10));
   S.words.push({
     id: nextId++,
     text: text,
     typed: '',
+    cells: shape.map((c) => ({ cx: c[0], cy: c[1] })),   // 依次对应 text 的第 1..n 个字
+    cols: cols, rows: rows,
     lane: lane,
-    x: Math.max(6, Math.min(W - w - 6, x)),
-    y: S.topY - 6 - Math.random() * 20,
-    w: w,
-    speed: 1 + (Math.random() - 0.5) * 0.22,
+    x: x,
+    y: S.topY - h - 4 - Math.random() * 16,
+    w: w, h: h,
+    speed: 1 + (Math.random() - 0.5) * 0.18,
     bornAt: Date.now(),
   });
 }
@@ -125,7 +153,7 @@ function update(dt) {
   for (let i = S.words.length - 1; i >= 0; i--) {
     const w = S.words[i];
     w.y += base * w.speed * dt;
-    if (w.y + 32 >= S.lineY) {
+    if (w.y + (w.h || CELL) >= S.lineY) {
       S.words.splice(i, 1);
       miss(w);
       if (S.over) return;

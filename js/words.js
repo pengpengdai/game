@@ -50,6 +50,11 @@ const DROP_CN = [
   '阳光', '花开', '星河', '晚安', '早餐', '地铁', '周末', '咖啡', '海边', '森林',
   '微笑', '奔跑', '星光', '山风', '夏夜', '秋叶', '冬雪', '初心', '远方', '成长',
 ];
+// 按字数分池（掉落方块用 3~5 字）
+const DROP_CN3 = ['打工人', '小可爱', '图书馆', '咖啡店', '公交车', '星期天', '好朋友', '运动会', '电影院', '键盘侠', '文艺范', '慢半拍'];
+const DROP_CN4 = ['阳光明媚', '前程似锦', '心想事成', '万事如意', '平平安安', '天天向上', '马到成功', '花好月圆', '一帆风顺', '岁月静好', '未来可期', '清风徐来'];
+const DROP_CN5 = ['世界那么大', '生活很美好', '一起去海边', '明天会更好', '星光不问路', '岁月不饶人', '山河已无恙', '人间值得来'];
+
 const DROP_EN = [
   'sun', 'moon', 'star', 'rain', 'book', 'game', 'fast', 'type', 'key', 'win',
   'blue', 'happy', 'light', 'music', 'smile', 'cloud', 'green', 'magic', 'night', 'river',
@@ -125,10 +130,15 @@ function hashPassage(s) {
   return (h >>> 0).toString(16);
 }
 
-/** 掉落玩法：随机取一个词 */
-function pickDrop(lang) {
+/** 掉落玩法：随机取一个词（可按字数取 3~5 字块） */
+function pickDrop(lang, len) {
+  if (len && lang !== 'en') {
+    const byLen = { 3: DROP_CN3, 4: DROP_CN4, 5: DROP_CN5 };
+    const pool = byLen[len] || DROP_CN;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
   const pool = lang === 'en' ? DROP_EN : DROP_CN;
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-module.exports = { pick, pickBySeed, hashPassage, LEVELS, ZH, EN, DROP_CN, DROP_EN, pickDrop };
+module.exports = { pick, pickBySeed, hashPassage, LEVELS, ZH, EN, DROP_CN, DROP_EN, DROP_CN3, DROP_CN4, DROP_CN5, pickDrop };

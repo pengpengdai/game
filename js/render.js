@@ -637,27 +637,37 @@ function drawDrop() {
   ctx.restore();
   txt('漏到线下扣 1 ★', W / 2, ly - 9, 9, 'rgba(225,72,63,0.75)', 'center', 600);
 
-  // 掉落词
+  // 掉落方块（俄罗斯方块式：3~5 字拼成形状）
+  const CELL = 34;
   for (let i = 0; i < D.words.length; i++) {
     const w = D.words[i];
     const typed = w.typed.length;
-    const padX = 10, h = 30;
-    const x = w.x, y = w.y;
-    fillRR(x, y + 2, w.w, h, 12, 'rgba(31,42,68,0.18)');
-    fillRR(x, y, w.w, h, 12, '#FFFFFF');
-    let tx = x + padX;
-    ctx.textBaseline = 'middle';
-    for (let ci = 0; ci < w.text.length; ci++) {
-      const ch = w.text[ci];
-      ctx.font = (ci <= typed ? 700 : 600) + ' 16px ' + FONT;
-      const cw = ctx.measureText(ch).width;
-      if (ci === typed) {
-        fillRR(tx - 2, y + 5, cw + 4, 20, 6, 'rgba(255,107,53,0.18)');
+    if (!w.cells) continue;
+    // 整块投影
+    fillRR(w.x + 3, w.y + 5, w.w, w.h, 10, 'rgba(31,42,68,0.10)');
+    for (let ci = 0; ci < w.cells.length; ci++) {
+      const c = w.cells[ci];
+      const x = w.x + c.cx * CELL + 2;
+      const y = w.y + c.cy * CELL + 2;
+      const done = ci < typed;
+      const cur = ci === typed;
+      if (done) {
+        fillRR(x, y, CELL - 4, CELL - 4, 8, C.green);
+      } else if (cur) {
+        fillRR(x, y, CELL - 4, CELL - 4, 8, '#FFF3EC');
+        rr(x, y, CELL - 4, CELL - 4, 8);
+        ctx.strokeStyle = C.orange;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else {
+        fillRR(x, y, CELL - 4, CELL - 4, 8, '#FFFFFF');
+        rr(x, y, CELL - 4, CELL - 4, 8);
+        ctx.strokeStyle = 'rgba(34,32,29,0.10)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
       }
-      ctx.fillStyle = ci < typed ? C.green : (ci === typed ? C.orangeDeep : 'rgba(34,32,29,0.66)');
-      ctx.textAlign = 'left';
-      ctx.fillText(ch, tx, y + h / 2);
-      tx += cw;
+      txt(w.text.charAt(ci), x + (CELL - 4) / 2, y + (CELL - 4) / 2, 17,
+        done ? '#fff' : (cur ? C.orangeDeep : 'rgba(34,32,29,0.78)'), 'center', done || cur ? 800 : 600);
     }
   }
 

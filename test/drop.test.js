@@ -93,5 +93,21 @@ assert(Drop.S.words.length === 2 && Drop.S.words[1].typed === '海', '同首字�
 // 词库覆盖
 assert(Words.DROP_CN.length >= 40 && Words.DROP_EN.length >= 15, '掉落词库充足（cn=' + Words.DROP_CN.length + '）');
 
+// 俄罗斯方块式掉落：3~5 字拼成形状
+Drop.start('cn');
+const pieces = Drop.S.words;
+assert(pieces.every((w) => w.cells && w.cells.length === w.text.length), '每个方块的字数与格子数一致');
+assert(pieces.every((w) => w.text.length >= 3 && w.text.length <= 5), '方块字数在 3~5 之间（' + pieces.map((w) => w.text.length).join('/') + '）');
+assert(pieces.every((w) => w.w === w.cols * 34 && w.h === w.rows * 34), '方块尺寸与格子行列一致');
+const L1 = Drop.tuning(1);
+assert(L1.speed <= 13, '第 1 关下落更慢（' + L1.speed + ' px/s）');
+assert(L1.gap >= 2.9, '第 1 关生成间隔更长（' + L1.gap.toFixed(2) + 's）');
+
+// 打完整块（逐格顺序）
+const piece = Drop.S.words[0];
+Drop.S.buf = '';
+Drop.input(piece.text);
+assert(Drop.S.words.indexOf(piece) === -1 && Drop.S.score > 0, '按格子顺序打完整块即消除（+' + Drop.S.score + '）');
+
 console.log('\n结果: ' + pass + ' 通过, ' + fail + ' 失败');
 process.exit(fail > 0 ? 1 : 0);
